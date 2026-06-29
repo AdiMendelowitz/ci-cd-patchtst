@@ -44,86 +44,77 @@ ci-cd-patchtst/
   requirements.txt
   .gitignore
   paper/
-    main.tex                 paper source
+    main.tex                  paper source
     references.bib
-    figures/                 figures referenced by main.tex
+    main.pdf                  built paper
+    figures/                  PNGs referenced by main.tex
   src/
-    models.py                PatchTST (CI and CD modes)
-    models_cd_head.py        cross-variate prediction head variant
-    generators/              generate_compound.py, generate_leader_follower.py,
-                             generate_block_cov.py
-    analysis/                analyze_synthetic.py, analyze_realdata.py,
-                             analyze_boundary.py, analyze_cd_head.py,
-                             analyze_equal_compute.py, analyze_block_cov.py,
-                             validate_granger.py, paired_stats.py
-    tests/                   test_experiments.py
-  notebooks/                 train_grid, train_leader_follower, train_etth1,
-                             train_ecl, train_boundary, train_dlinear,
-                             train_cd_head, train_equal_compute,
-                             train_block_cov  (all .ipynb)
-  results/                   canonical CSVs only
+    models.py                 PatchTST CI and CD modes, the PatchTST_CD_Head
+                              cross-variate head, TrueDLinear, and build_model
+    generators/
+      generate_leader_follower.py   leader-follower VAR(1) generator
+      generate_block_cov.py         block-covariance AR(1) generator
+    analysis/
+      analyze_synthetic.py          Table 3, Figure 1, Section 3
+      analyze_realdata.py           Table 4, Table 5, Figure 2
+      analyze_leader_follower.py    Table 6, Section 4.3 slope
+      analyze_boundary.py           Table 7, Figure 3, Section 4.4
+      analyze_overtrain.py          Figure 4, Section 5.1
+      analyze_equal_compute.py      Section 5.2
+      analyze_cd_head.py            Section 5.3
+      analyze_block_cov.py          Section 5.4
+      analyze_equiv_table.py        Table 8
+      validate_granger.py           Section 2.1 Granger non-causality
+      paired_stats.py               shared paired-difference library
+    tests/
+      test_experiments.py
+      conftest.py
+  notebooks/                  training notebooks (Kaggle T4); see note below
+  results/                    committed result CSVs (see inventory below)
   docs/
     design_rationale.md
 ```
 
+The cross-variate head is the class `PatchTST_CD_Head` inside `src/models.py`;
+there is no separate `models_cd_head.py`. There is no `generate_compound.py`; the
+AR(1) grid generator is not committed (see "Reproducing from scratch").
+
 ## Installation
 
-Python 3.12 is assumed. With uv:
+Python 3.12 is assumed. Create a virtual environment and install with pip:
 
 ```
-uv venv
-uv pip install -r requirements.txt
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+pip install -r requirements.txt
 ```
 
-GPU training was run on single NVIDIA T4 notebooks; the analysis and plotting
-scripts run on CPU.
+`requirements.txt` covers the analysis and plotting stack: numpy, pandas, scipy,
+statsmodels, matplotlib, and seaborn. It also pins torch, which is needed only to
+import `src/models.py` or to run the torch-gated model tests; the analysis scripts
+that reproduce every table and figure do not import torch. All analysis runs on
+CPU.
 
-## Reproducing the experiments
+## Running the tests
 
-1. Generate the synthetic data with the scripts in `src/generators/`. Real
-   datasets (ETTh1, ECL) are downloaded separately; synthetic data is
-   regenerated from seeds and is not tracked.
-2. Train with the notebooks in `notebooks/`. Each writes a canonical CSV to
-   `results/`.
-3. Analyse with the scripts in `src/analysis/`. Each reads its canonical CSV and
-   reproduces the reported statistics and figures.
-4. Build the paper from `paper/main.tex`.
-
-Every number in the paper reproduces from a canonical CSV in `results/` before it
-is written, so the analysis scripts are the single source of truth. Paired
-statistics (per-seed differences, confidence intervals, and the regression
-helpers) are shared through `src/analysis/paired_stats.py`.
-
-## Results
-
-`results/` holds the canonical CSVs only. The main ones are the AR(1) grid
-(`results_grid.csv`), the leader-follower sweep
-(`results_leader_follower.csv`), the ETTh1 matched-budget runs
-(`results_etth1.csv`), the ECL CI-only runs (`results_ecl.csv`),
-the boundary sweep, and the three robustness CSVs for the cross-variate head,
-matched-compute, and block-covariance controls.
-
-## Citing
-
-```bibtex
-@misc{mendelowitz2026cicd,
-  author       = {Adi Mendelowitz},
-  title        = {Equal Accuracy, Unequal Cost: Channel Dependence in
-                  PatchTST under Controlled Coupling},
-  year         = {2026},
-  howpublished = {\url{https://github.com/AdiMendelowitz/ci-cd-patchtst}}
-}
+```
+python -m pytest src/tests/
 ```
 
-Replace the URL with the final repository location, and add a Zenodo DOI here if
-you archive a release.
+The generator and paired-statistics tests run on any machine. The model tests are
+skipped automatically when torch is unavailable, so a CPU-only environment without
+the deep-learning stack still exercises the data-generation and statistics code. A
+clean run reports passes plus skips and no failures.
 
-## Licence
+## Reproducing the paper
 
-Code is released under the MIT Licence (see `LICENSE`). The paper text and
-figures are released under CC-BY-4.0.
+Every table and figure is recomputed from a committed CSV in `results/` by one
+analysis script. Run each from the repository root. The scripts carry the numbers
+and print them on each run, so this README does not restate result values that
+could drift from the paper. Figure-producing scripts write their PNG into
+`paper/figures/`.
 
-## Contact
-
-Adi Mendelowitz, adimendelowitz@gmail.com.
-GitHub: github.com/AdiMendelowitz. Site: adimendelowitz.dev.
+| Paper claim | Command | Reads | Prints / writes |
+| --- | --- | --- | --- |
+| Table 3, Figure 1, Section 3 | `python src/analysis/analyze_synthetic.py` | `results/results_grid.csv` | per-cell and grand-mean CD-CI, regression; writes `paper/figures/heatmap.png` |
+| Table 4, Tabl

@@ -1,0 +1,13 @@
+family,cell,selection_rule,source_csv,value_column,contrast,cd_minus_ci,ci_lo,ci_hi,rel_pct,within_threshold,n
+AR(1) grid,grand mean (9 cells),early-stop,results_grid.csv,test_mse,CD-CI,0.0013,-0.0002,0.0028,0.13,True,45
+Leader-follower,$\gamma = 0.6$,early-stop,results_cd_head.csv,test_mse,CD-CI,0.0079,0.0046,0.0113,0.77,True,5
+Leader-follower,$\gamma = 0.6$,val-minimum,results_overtrain_summary.csv,test_upd_global,CD-CI,-0.0031,-0.0109,0.0046,-0.3,True,5
+Leader-follower,$\gamma = 0.6$,matched-$U$,results_equal_compute.csv,test_mse,CD-CI,-0.0053,-0.0092,-0.0014,-0.52,True,5
+Leader-follower,$\gamma = 0.9$,early-stop,results_cd_head.csv,test_mse,CD-CI,0.0085,0.005,0.0119,0.82,True,5
+Leader-follower,"$\gamma = 0.6$, cross-var.\ head",early-stop,results_cd_head.csv,test_mse,CD_Head-CI,0.003,-0.0034,0.0094,0.29,True,5
+Leader-follower,"$\gamma = 0.9$, cross-var.\ head",early-stop,results_cd_head.csv,test_mse,CD_Head-CI,0.0023,-0.0035,0.0082,0.23,True,5
+AR(1),"$C{=}84$, $\rho{=}0.9$",matched-$U$,results_equal_compute.csv,test_mse,CD-CI,-0.0028,-0.0138,0.0082,-0.27,True,5
+Block-cov.,"$C{=}21$, $\rho_{\text{in}}{=}0.5$",early-stop,results_block_cov.csv,test_mse,CD-CI,0.0028,0.0015,0.004,0.27,True,5
+Block-cov.,"$C{=}21$, $\rho_{\text{in}}{=}0.9$",early-stop,results_block_cov.csv,test_mse,CD-CI,-0.0062,-0.0137,0.0013,-0.6,True,5
+Block-cov.,"$C{=}84$, $\rho_{\text{in}}{=}0.5$",early-stop,results_block_cov.csv,test_mse,CD-CI,0.0005,-0.0005,0.0016,0.05,True,5
+Block-cov.,"$C{=}84$, $\rho_{\text{in}}{=}0.9$",early-stop,results_block_cov.csv,test_mse,CD-CI,0.0,-0.001,0.001,0.0,True,5
