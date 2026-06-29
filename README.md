@@ -57,7 +57,7 @@ ci-cd-patchtst/
                              analyze_equal_compute.py, analyze_block_cov.py,
                              validate_granger.py, paired_stats.py
     tests/                   test_experiments.py
-  notebooks/                 train_grid, train_leader_follower, train_etth1_clean,
+  notebooks/                 train_grid, train_leader_follower, train_etth1,
                              train_ecl, train_boundary, train_dlinear,
                              train_cd_head, train_equal_compute,
                              train_block_cov  (all .ipynb)
@@ -97,9 +97,9 @@ helpers) are shared through `src/analysis/paired_stats.py`.
 ## Results
 
 `results/` holds the canonical CSVs only. The main ones are the AR(1) grid
-(`results_grid_canonical_n5.csv`), the leader-follower sweep
-(`results_lf_unified_v2.csv`), the ETTh1 matched-budget runs
-(`ci_cd_etth1_clean.csv`), the ECL CI-only runs (`ecl_ci_canonical_clean.csv`),
+(`results_grid.csv`), the leader-follower sweep
+(`results_leader_follower.csv`), the ETTh1 matched-budget runs
+(`results_etth1.csv`), the ECL CI-only runs (`results_ecl.csv`),
 the boundary sweep, and the three robustness CSVs for the cross-variate head,
 matched-compute, and block-covariance controls.
 
