@@ -5,6 +5,8 @@
 \usepackage{booktabs}
 \usepackage{float}
 \usepackage{natbib}
+\usepackage{microtype}
+\setlength{\emergencystretch}{3em}
 
 \title{Equal Accuracy, Unequal Cost: \\ Channel Dependence in PatchTST under Controlled Coupling}
 \author{Adi Mendelowitz}
@@ -46,14 +48,19 @@ single-T4 training budget.
 
 \section{Introduction}
 
-Whether channel-independent (CI) or channel-dependent (CD) architectures forecast better has been judged almost entirely on observational benchmarks, where many properties of the data move together across datasets. A win there names the stronger model on those series without isolating its cause. Here we control the generative process: synthetic AR(1) and leader-follower VAR(1) families that vary instantaneous correlation, lagged cross-channel dependence, and variate count independently, with ETTh1 and ECL as real-data context rather than primary evidence.
+Whether channel-independent (CI) or channel-dependent (CD) architectures forecast better has been judged almost entirely
+on observational benchmarks, where many properties of the data move together across datasets. A win there names the
+stronger model on those series without isolating its cause. Here we control the generative process: synthetic AR(1) and
+leader-follower VAR(1) families that vary instantaneous correlation, lagged cross-channel dependence, and variate count
+independently, with ETTh1 and ECL as real-data context rather than primary evidence.
 
-The first experiment generates data from an AR(1) process with diagonal transition and compound-symmetry covariance,
-so the only cross-channel structure is instantaneous correlation. The second introduces lagged coupling through a
+The first experiment generates data from an AR(1) process with diagonal transition and compound-symmetry covariance, so
+the only cross-channel structure is instantaneous correlation. The second introduces lagged coupling through a
 leader-follower VAR(1) process where coupling strength $\gamma$ is a controllable parameter. No point in the tested
 coupling-structure space yielded a consistent CD advantage. Section~\ref{sec:setup} describes the experimental design,
 Section~\ref{sec:results} presents the AR(1) grid and real-data results, Section~\ref{sec:analysis} covers the
-leader-follower experiments, and Sections~5--7 discuss limitations, related work, and conclusions.
+leader-follower experiments, Section~\ref{sec:robustness} presents the fair-protocol robustness controls, and the
+remaining sections discuss limitations, related work, and conclusions.
 
 \subsection{Research Questions and Scope}
 
@@ -314,7 +321,7 @@ $d_s = e^{\text{CD}}_s - e^{\text{CI}}_s$ over seeds $\{42, 123, 456, 789, 1011\
 deviation, and 95\% confidence interval from a $t$-distribution with four degrees of freedom ($t_{0.025,4} = 2.776$).
 Across all nine cells the mean CD$-$CI difference stays within $\pm 0.0054$ MSE units, at most $0.56\%$ of the
 corresponding CI mean, and seven of nine 95\% CIs include zero. The two that exclude zero are at $C = 7$, $\rho = 0.1$
-and $C = 21$, $\rho = 0.1$; both are positive (CD worse) and below $0.19\%$ of the CI mean in their respective cells,
+and $C = 21$, $\rho = 0.1$; both are positive (CD worse) and below $0.20\%$ of the CI mean in their respective cells,
 well within the detection bound. Pooling the 45 matched pairs as a simple unweighted average over all differences, the
 grand-mean CD$-$CI is $+0.0013$ MSE (95\% CI $[-0.0002, +0.0028]$, $0.13\%$ of the mean CI MSE), and regressing the
 paired difference on $C$ (categorical) and $\rho$ finds no dependence on either factor ($F$-test $p = 0.81$,
@@ -381,10 +388,10 @@ finding, specific to PatchTST's flattened-token tokenisation rather than to chan
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{real_data.png}
-    \caption{Real-data test MSE across prediction horizons $H \in \{96, 192, 336, 720\}$, mean over five seeds
-             $\{42, 123, 456, 789, 1011\}$ for ETTh1 and three seeds $\{42, 123, 456\}$ for ECL, with error bars showing the cross-seed standard deviation. Left: ETTh1
-             ($C = 7$), CI versus CD under matched-budget protocol. CI is significantly better at $H \in \{96, 720\}$
-             and never worse than CD across all horizons. Right: ECL ($C = 321$), CI only, since the
+    \caption{Real-data test MSE across prediction horizons $H \in \{96, 192, 336, 720\}$, with error bars showing the
+             cross-seed standard deviation. Left: ETTh1 ($C = 7$), CI versus CD under the matched-budget protocol, mean
+             over seeds $\{42, 123, 456, 789, 1011\}$. CI is significantly better at $H \in \{96, 720\}$ and never
+             worse than CD across all horizons. Right: ECL ($C = 321$), CI only over seeds $\{42, 123, 456\}$, since the
              concatenated-token CD formulation is computationally infeasible at this variate count.}
     \label{fig:real_data}
 \end{figure}
@@ -642,7 +649,7 @@ neither mode holds a practically relevant accuracy advantage under fair selectio
              threshold.}
     \label{tab:equiv}
     \small
-    \setlength{\tabcolsep}{4.5pt}
+    \setlength{\tabcolsep}{3pt}
     \begin{tabular}{lllrr c}
         \toprule
         Family & Cell & Selection rule & CD$-$CI & Rel & $\le 1\%$ \\
