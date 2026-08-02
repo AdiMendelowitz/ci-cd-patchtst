@@ -50,18 +50,22 @@ Per-group and overall status is one of three values:
   [PASS]     All tests in the group produced the expected outcome.
   [FAIL]     One or more tests produced an unexpected outcome. This indicates a possible defect in the data generator
              and should be investigated.
-  [EXPECTED] All failures in the group are in a category where false positives are statistically expected (follower->
-             leader or leader->leader at any gamma, or leader->follower at gamma=0). The generator is behaving correctly.
+  [EXPECTED] All failures in the group are in a category where false positives are statistically expected
+             (follower->leader or leader->leader at any gamma, or leader->follower at gamma=0). The generator
+             is behaving correctly.
 
 The distinction between FAIL and EXPECTED prevents a real generator defect from
 being masked by the "expected false positive" explanation, and prevents a
-spurious alarm when sampling variation produces the anticipated result.
+spurious alarm when sampling variation produces the anticipated result. The
+conditional isolate->follower tests are deliberately excluded from EXPECTED:
+their null is also true, but a false positive there is graded FAIL so the
+paper's key conditioning claim is never waved through as sampling noise.
 
 Usage
 -----
 python validate_granger.py [--gamma GAMMA [GAMMA ...]] [--rho RHO] [--seed SEED]
 Default gamma sweep is {0.0, 0.3, 0.6, 0.9} -- all four values used in the
-leader-follower experiment. Run from time-series-forecasting/
+leader-follower experiment. Run from the repository root.
 
 Outputs to console only; no files written.
 """
@@ -78,31 +82,26 @@ from statsmodels.tsa.stattools import grangercausalitytests
 
 import sys as _sys
 from pathlib import Path as _Path
+
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "generators"))
 
-from generate_leader_follower import (
+from generate_leader_follower import (  # noqa: E402  (must follow the sys.path shim above)
     N_FOLLOWERS,
     N_LEADERS,
     _ISOLATE_IDX,
     generate,
 )
 
-# statsmodels emits a FutureWarning on every call to grangercausalitytests
-# (verbose is being deprecated) regardless of verbose=False. Suppress it here
-# so the structured validation output is not buried in warning noise.
-warnings.filterwarnings(
-    "ignore",
-    category=FutureWarning,
-    module="statsmodels",
-)
+# statsmodels emits a FutureWarning on every call to grangercausalitytests (verbose is being deprecated) regardless of
+# verbose=False
+warnings.filterwarnings("ignore", category=FutureWarning, module="statsmodels",)
 
 # Significance threshold for all tests.
 _ALPHA: float = 0.05
 # VAR lag order matches the true DGP.
 _LAG_ORDER: int = 1
-# Seed for reproducible leader->leader pair sampling. Kept separate from the
-# data seed so the same five pairs are drawn on every run regardless of --seed,
-# making the leader->leader results directly comparable across seeds.
+# Seed for reproducible leader->leader pair sampling. Kept separate from the data seed so the same five pairs are drawn
+# on every run regardless of --seed, making the leader->leader results directly comparable across seeds.
 _SAMPLE_SEED: int = 0
 
 
@@ -118,20 +117,18 @@ def _bivariate_pvalue(data: np.ndarray, cause: int, effect: int) -> float:
         p-value from the Granger F-test.
     """
     pair = np.column_stack([data[:, effect], data[:, cause]])
-    results = grangercausalitytests(pair, maxlag=_LAG_ORDER, verbose=False)
+    try:
+        results = grangercausalitytests(pair, maxlag=_LAG_ORDER, verbose=False)
+    except TypeError:  # statsmodels release that removed the deprecated verbose kwarg
+        results = grangercausalitytests(pair, maxlag=_LAG_ORDER)
     return float(results[_LAG_ORDER][0]["ssr_ftest"][1])
 
 
-def _conditional_pvalue(
-    data: np.ndarray,
-    cause: int,
-    effect: int,
-    controls: list[int],
-) -> float:
+def _conditional_pvalue(data: np.ndarray, cause: int, effect: int, controls: list[int],) -> float:
     """F-test p-value for 'cause -> effect' conditional on control variables.
 
-    Tests whether lagged cause[t-1] improves prediction of effect[t] after
-    controlling for lagged effect[t-1] and lagged controls[t-1].
+    Tests whether lagged cause[t-1] improves prediction of effect[t] after controlling for lagged effect[t-1] and lagged
+    controls[t-1].
 
     Args:
         data:     Array of shape (T, C).
@@ -142,27 +139,22 @@ def _conditional_pvalue(
     Returns:
         p-value from the incremental F-test.
     """
-    y           = data[1:, effect]
-    base_cols   = [effect] + controls
-    X_restricted   = data[:-1, base_cols]
+    y = data[1:, effect]
+    base_cols = [effect] + controls
+    X_restricted = data[:-1, base_cols]
     X_unrestricted = np.column_stack([X_restricted, data[:-1, cause]])
 
     r_res = OLS(y, add_constant(X_restricted)).fit()
     r_unr = OLS(y, add_constant(X_unrestricted)).fit()
 
-    n     = len(y)
+    n = len(y)
     k_res = X_restricted.shape[1] + 1
     k_unr = X_unrestricted.shape[1] + 1
-    F     = ((r_res.ssr - r_unr.ssr) / (k_unr - k_res)) / \
-            (r_unr.ssr / (n - k_unr))
-    return float(1.0 - scipy_stats.f.cdf(F, k_unr - k_res, n - k_unr))
+    F = ((r_res.ssr - r_unr.ssr) / (k_unr - k_res)) / (r_unr.ssr / (n - k_unr))
+    return float(scipy_stats.f.sf(F, k_unr - k_res, n - k_unr))
 
 
-def _run_tests(
-    data: np.ndarray,
-    gamma: float,
-    rng: np.random.Generator,
-) -> pd.DataFrame:
+def _run_tests(data: np.ndarray, gamma: float, rng: np.random.Generator,) -> pd.DataFrame:
     """Run the structured Granger test battery.
 
     Args:
@@ -175,22 +167,18 @@ def _run_tests(
     """
     rows: list[dict] = []
 
-    def record(
-        direction: str,
-        cause: int,
-        effect: int,
-        pvalue: float,
-        expected: bool,
-    ) -> None:
-        rows.append({
-            "direction":            direction,
-            "cause":                cause,
-            "effect":               effect,
-            "pvalue":               round(pvalue, 4),
-            "significant":          pvalue < _ALPHA,
-            "expected_significant": expected,
-            "correct":              (pvalue < _ALPHA) == expected,
-        })
+    def record(direction: str, cause: int, effect: int, pvalue: float, expected: bool,) -> None:
+        rows.append(
+            {
+                "direction": direction,
+                "cause": cause,
+                "effect": effect,
+                "pvalue": round(pvalue, 4),
+                "significant": pvalue < _ALPHA,
+                "expected_significant": expected,
+                "correct": (pvalue < _ALPHA) == expected,
+            }
+        )
 
     # (a) All 10 designed leader->follower pairs (bivariate).
     expected_lf = gamma > 0.0
@@ -213,20 +201,19 @@ def _run_tests(
             record("leader->leader (bivariate)", i, j, pval, False)
 
     # (d) Conditional test: isolate->follower after conditioning on true leader.
-    # Tests followers 10 and 17 (the first and eighth follower pairs: leaders 0
-    # and 7). These are representative, not randomly sampled -- the same two
-    # pairs are always tested so results are reproducible and comparable across
-    # seeds. Expected: NOT significant (isolate has no structural effect once
-    # the true leader is controlled for).
+    # Tests followers 10 and 17 (the first and eighth follower pairs: leaders 0 and 7). These are representative, not
+    # randomly sampled: the same two pairs are always tested so results are reproducible and comparable across seeds.
+    # Expected: NOT significant (isolate has no structural effect once the true leader is controlled for).
     for k in [0, 7]:  # representative follower pairs (leader k, follower k+10)
-        follower   = N_LEADERS + k
-        leader     = k
-        pval = _conditional_pvalue(
-            data, cause=_ISOLATE_IDX, effect=follower, controls=[leader]
-        )
+        follower = N_LEADERS + k
+        leader = k
+        pval = _conditional_pvalue(data, cause=_ISOLATE_IDX, effect=follower, controls=[leader])
         record(
             f"isolate->follower{follower} | leader{leader} (conditional)",
-            _ISOLATE_IDX, follower, pval, expected=False,
+            _ISOLATE_IDX,
+            follower,
+            pval,
+            expected=False,
         )
 
     return pd.DataFrame(rows)
@@ -235,11 +222,10 @@ def _run_tests(
 def _is_expected_failure(row: pd.Series, gamma: float) -> bool:
     """True when a test failure is statistically expected rather than indicative of a generator defect.
 
-    Expected failures are false positives (significant when not expected) in groups where
-    the null is true: follower->leader, leader->leader, or leader->follower at gamma=0.
-    A genuine failure is a false negative (non-significant when expected) in the
-    leader->follower group at gamma > 0, which would indicate the generator is not
-    producing the designed coupling.
+    Expected failures are false positives (significant when not expected) in groups where the null is true:
+    follower->leader, leader->leader, or leader->follower at gamma=0. A genuine failure is a false negative
+    (non-significant when expected) in the leader->follower group at gamma > 0, which would indicate the generator is
+    not producing the designed coupling.
     """
     is_false_positive = row["significant"] and not row["expected_significant"]
     in_null_group = (
@@ -257,45 +243,45 @@ def run_validation(gamma: float, rho: float, seed: int) -> None:
     print(f"Lag order: {_LAG_ORDER}  |  Alpha: {_ALPHA}")
     print(f"{'='*64}")
 
-    data    = generate(phi=0.8, gamma=gamma, rho=rho, seed=seed)
-    rng     = np.random.default_rng(_SAMPLE_SEED)
+    data = generate(phi=0.8, gamma=gamma, rho=rho, seed=seed)
+    rng = np.random.default_rng(_SAMPLE_SEED)
     results = _run_tests(data, gamma, rng)
 
     for direction, grp in results.groupby("direction", sort=False):
-        n_total   = len(grp)
+        n_total = len(grp)
         n_correct = int(grp["correct"].sum())
-        n_sig     = int(grp["significant"].sum())
-        expected  = grp["expected_significant"].iloc[0]
+        n_sig = int(grp["significant"].sum())
+        expected = grp["expected_significant"].iloc[0]
 
         if n_correct == n_total:
             status = "PASS"
         else:
             failures = grp[~grp["correct"]]
-            all_expected = all(
-                _is_expected_failure(r, gamma) for _, r in failures.iterrows()
-            )
+            all_expected = all(_is_expected_failure(r, gamma) for _, r in failures.iterrows())
             status = "EXPECTED" if all_expected else "FAIL"
 
         print(f"\n[{status}] {direction}")
-        print(f"  Expected: {'significant' if expected else 'not significant'}  |  "
-              f"{n_correct}/{n_total} correct  |  {n_sig} significant")
+        print(
+            f"  Expected: {'significant' if expected else 'not significant'}  |  "
+            f"{n_correct}/{n_total} correct  |  {n_sig} significant"
+        )
         for _, r in grp.iterrows():
             marker = "\u2713" if r["correct"] else "\u2717"
-            print(f"  {marker}  {r['cause']:>2} -> {r['effect']:>2}  "
-                  f"p={r['pvalue']:.4f}  {'*' if r['significant'] else ' '}")
+            print(
+                f"  {marker}  {r['cause']:>2} -> {r['effect']:>2}  "
+                f"p={r['pvalue']:.4f}  {'*' if r['significant'] else ' '}"
+            )
 
     # Overall status: FAIL only if any failure is not an expected false positive.
     all_failures = results[~results["correct"]]
     if all_failures.empty:
         overall = "PASS"
-    elif all(
-        _is_expected_failure(r, gamma) for _, r in all_failures.iterrows()
-    ):
+    elif all(_is_expected_failure(r, gamma) for _, r in all_failures.iterrows()):
         overall = "EXPECTED"
     else:
         overall = "FAIL"
 
-    n_total   = len(results)
+    n_total = len(results)
     n_correct = int(results["correct"].sum())
     print(f"\n{'─'*40}")
     print(f"Overall: {n_correct}/{n_total} tests correct  [{overall}]")
@@ -307,24 +293,18 @@ def run_validation(gamma: float, rho: float, seed: int) -> None:
             "variation at alpha=0.05 and does not indicate a generator defect."
         )
     elif overall == "FAIL":
-        genuine = all_failures[
-            ~all_failures.apply(lambda r: _is_expected_failure(r, gamma), axis=1)
-        ]
+        genuine = all_failures[~all_failures.apply(lambda r: _is_expected_failure(r, gamma), axis=1)]
         cols = ["direction", "cause", "effect", "pvalue", "significant", "expected_significant"]
         print("\nGenuine failures (unexpected outcome -- investigate generator):")
         print(genuine[cols].to_string(index=False))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Validate Granger causality structure of generated data."
-    )
-    parser.add_argument(
-        "--gamma", type=float, nargs="+", default=[0.0, 0.3, 0.6, 0.9],
-        help="Gamma values to validate (default: 0.0 0.3 0.6 0.9).",
-    )
-    parser.add_argument("--rho",  type=float, default=0.5)
-    parser.add_argument("--seed", type=int,   default=42)
+    parser = argparse.ArgumentParser(description="Validate Granger causality structure of generated data.")
+    parser.add_argument("--gamma", type=float, nargs="+", default=[0.0, 0.3, 0.6, 0.9],
+                        help="Gamma values to validate (default: 0.0 0.3 0.6 0.9).",)
+    parser.add_argument("--rho", type=float, default=0.5)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     for gamma in args.gamma:

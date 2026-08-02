@@ -1,11 +1,12 @@
 """Unit tests for the experiment 1-3 additions.
 
 Generator and statistics tests run anywhere numpy and scipy are present. Model
-tests require torch and are skipped automatically when it is unavailable, so the
-suite still passes on a CPU-only machine without the deep-learning stack.
+tests exercise src/models.py and require torch; they are skipped automatically
+when torch is unavailable, so the suite still passes on a CPU-only machine
+without the deep-learning stack.
 
-Run from time-series-forecasting/:
-    pytest test_experiments.py -q
+Run from the repository root:
+    python -m pytest src/tests/ -q
 """
 
 import numpy as np
@@ -131,7 +132,10 @@ def test_make_diff_frame_missing_mode_raises():
 
 
 def _models():
-    return pytest.importorskip("models_cd_head")
+    pytest.importorskip("torch")
+    import models
+
+    return models
 
 
 def test_num_patches():
@@ -142,7 +146,7 @@ def test_num_patches():
 @pytest.mark.parametrize("mode", ["CI", "CD", "CD_Head", "DLinear"])
 def test_model_output_shape(mode):
     m = _models()
-    torch = pytest.importorskip("torch")
+    import torch
     model = m.build_model(mode, _SEQ_LEN, _PRED_LEN, num_variates=21,
                           patch_size=_PATCH, stride=_STRIDE, d_model=64, n_heads=8, n_layers=3, dropout=0.2)
     model.eval()
@@ -154,7 +158,6 @@ def test_model_output_shape(mode):
 
 def test_head_dimensions():
     m = _models()
-    pytest.importorskip("torch")
     n = m.num_patches(_SEQ_LEN, _PATCH, _STRIDE)
     cd = m.build_model("CD", _SEQ_LEN, _PRED_LEN, 21, _PATCH, _STRIDE, 64, 8, 3, 0.2)
     head = m.build_model("CD_Head", _SEQ_LEN, _PRED_LEN, 21, _PATCH, _STRIDE, 64, 8, 3, 0.2)
@@ -167,7 +170,6 @@ def test_head_dimensions():
 def test_cd_head_encoder_matches_cd():
     # The encoder must be untouched relative to CD so the variant isolates the head.
     m = _models()
-    pytest.importorskip("torch")
     cd = m.build_model("CD", _SEQ_LEN, _PRED_LEN, 21, _PATCH, _STRIDE, 64, 8, 3, 0.2)
     head = m.build_model("CD_Head", _SEQ_LEN, _PRED_LEN, 21, _PATCH, _STRIDE, 64, 8, 3, 0.2)
     cd_enc = sum(p.numel() for p in cd.encoder.parameters())
@@ -175,9 +177,15 @@ def test_cd_head_encoder_matches_cd():
     assert cd_enc == head_enc
 
 
+def test_build_model_unknown_mode_raises():
+    m = _models()
+    with pytest.raises(ValueError):
+        m.build_model("CI_CD", _SEQ_LEN, _PRED_LEN, 21, _PATCH, _STRIDE, 64, 8, 3, 0.2)
+
+
 def test_model_deterministic_in_eval():
     m = _models()
-    torch = pytest.importorskip("torch")
+    import torch
     torch.manual_seed(0)
     model = m.build_model("CD_Head", _SEQ_LEN, _PRED_LEN, 21, _PATCH, _STRIDE, 64, 8, 3, 0.2)
     model.eval()
