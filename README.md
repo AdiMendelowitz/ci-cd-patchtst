@@ -46,7 +46,6 @@ ci-cd-patchtst/
   paper/
     main.tex                  paper source
     references.bib
-    main.pdf                  built paper
     figures/                  PNGs referenced by main.tex
   src/
     models.py                 PatchTST CI and CD modes, the PatchTST_CD_Head
@@ -117,4 +116,51 @@ could drift from the paper. Figure-producing scripts write their PNG into
 | Paper claim | Command | Reads | Prints / writes |
 | --- | --- | --- | --- |
 | Table 3, Figure 1, Section 3 | `python src/analysis/analyze_synthetic.py` | `results/results_grid.csv` | per-cell and grand-mean CD-CI, regression; writes `paper/figures/heatmap.png` |
-| Table 4, Tabl
+| Table 4, Table 5, Figure 2 | `python src/analysis/analyze_realdata.py` | `results/results_etth1.csv`, `results/results_ecl.csv` | ETTh1 per-horizon paired CD-CI, ECL CI-only summary; writes `paper/figures/real_data.png` |
+| Table 6, Section 4.3 slope | `python src/analysis/analyze_leader_follower.py` | `results/results_leader_follower.csv` | per-gamma CI, CD, and DLinear means and the gamma slope, with an oracle self-check |
+| Table 7, Figure 3, Section 4.4 | `python src/analysis/analyze_boundary.py` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv` | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
+| Figure 4, Section 5.1 | `python src/analysis/analyze_overtrain.py` | `results/results_overtrain_summary.csv`, `results/results_overtrain_diag.csv` | selection-rule effect sizes; writes `paper/figures/diag_overlay_clean.png` |
+| Section 5.2 | `python src/analysis/analyze_equal_compute.py` | `results/results_equal_compute.csv` | matched-budget CD-CI with a validity gate on the update budget |
+| Section 5.3 | `python src/analysis/analyze_cd_head.py` | `results/results_cd_head.csv` | cross-variate-head contrasts against CI and CD |
+| Section 5.4 | `python src/analysis/analyze_block_cov.py` | `results/results_block_cov.csv` | block-covariance per-cell CD-CI and the rho_in slope |
+| Table 8 | `python src/analysis/analyze_equiv_table.py` | `results/results_grid.csv`, `results_cd_head.csv`, `results_overtrain_summary.csv`, `results_equal_compute.csv`, `results_block_cov.csv` | recomputes all twelve equivalence rows; writes `results/equiv_summary.csv` |
+| Section 2.1 Granger | `python src/analysis/validate_granger.py` | generates data internally | Granger non-causality battery (console only) |
+
+## Results CSV inventory
+
+`results/` holds twelve CSVs, each the committed input to one analysis script
+(`equiv_summary.csv` is also written by `analyze_equiv_table.py`):
+
+- `results_grid.csv` -- AR(1) grid (Table 3, Figure 1, Section 3)
+- `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL (Tables 4 and 5, Figure 2)
+- `results_leader_follower.csv` -- leader-follower P=16 sweep (Table 6, Section 4.3)
+- `results_boundary.csv`, `results_boundary_p4_ci.csv` -- boundary patch-size sweep (Table 7, Figure 3, Section 4.4)
+- `results_overtrain_summary.csv`, `results_overtrain_diag.csv` -- overtraining and selection diagnostic (Figure 4, Section 5.1)
+- `results_equal_compute.csv` -- matched-compute control (Section 5.2)
+- `results_cd_head.csv` -- cross-variate-head control (Section 5.3)
+- `results_block_cov.csv` -- block-covariance family (Section 5.4)
+- `equiv_summary.csv` -- practical-equivalence summary (Table 8)
+
+## Notebooks
+
+The `notebooks/` directory holds seven training notebooks, each run on a Kaggle T4
+GPU, that produced the result CSVs: leader-follower, ETTh1, ECL, DLinear,
+cross-variate head, equal compute, and block covariance. The AR(1) grid and the
+boundary patch-size sweep are not among them; see Reproducing from scratch.
+
+## Reproducing from scratch
+
+Reproducing every table and figure from the committed CSVs needs only the analysis
+scripts above and the CPU stack in `requirements.txt`. Retraining the models from
+raw synthetic data is partially supported. The seven notebooks retrain the
+experiments listed above on a single T4. The AR(1) grid and the boundary
+patch-size sweep are the exception: their training notebooks (`train_grid.ipynb`,
+`train_boundary.ipynb`) and the AR(1) compound-symmetry generator
+(`generate_compound.py`) are not committed, so those two experiments reproduce
+from their committed CSVs but cannot be retrained from this repository. The
+leader-follower and block-covariance generators under `src/generators/` are
+committed.
+
+## License
+
+Released under the MIT License; see `LICENSE`.
