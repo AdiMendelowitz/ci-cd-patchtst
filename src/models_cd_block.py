@@ -144,13 +144,19 @@ class PatchTST_CD_Block(nn.Module):
         p = xp.unfold(-1, self.patch_size, self.stride)  # (B*C, N, P)
         emb = self.embed_dropout(self.proj(p)).reshape(B, Cv, n, d)
 
-        out = emb.new_empty(B, Cv, n, d)
+        # Allocated from the first encoder output, not from emb: under CUDA
+        # autocast the embedding Linear emits float16 while the encoder ends in
+        # LayerNorm, which autocast runs in float32, and an index_put across
+        # that dtype split raises at runtime.
+        out: torch.Tensor | None = None
         for size in self._sizes:
             idx: torch.Tensor = getattr(self, f"_idx_{size}")  # (n_groups, size)
             n_groups = idx.shape[0]
             g = emb[:, idx.reshape(-1)]  # (B, n_groups*size, N, D)
             g = g.reshape(B * n_groups, size * n, d)
             enc = self.encoder(g).reshape(B, n_groups * size, n, d)
+            if out is None:
+                out = enc.new_empty(B, Cv, n, d)
             out[:, idx.reshape(-1)] = enc
 
         return self.head(out.reshape(B * Cv, n * d)).reshape(B, Cv, -1).permute(0, 2, 1)

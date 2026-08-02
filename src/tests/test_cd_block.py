@@ -122,6 +122,18 @@ def test_within_group_dependence():
     assert not torch.allclose(a[:, :, 13], b[:, :, 13])
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA autocast dtype policy not reproducible on CPU")
+def test_forward_under_cuda_autocast():
+    # Regression: the group scatter must tolerate autocast's mixed dtypes
+    # (fp16 embedding output, fp32 LayerNorm-terminated encoder output).
+    model = _build(mcb.leader_follower_groups(), 21).cuda()
+    model.train()
+    x = torch.randn(2, _SEQ_LEN, 21, device="cuda")
+    with torch.autocast("cuda"):
+        out = model(x)
+    assert out.shape == (2, _PRED_LEN, 21)
+
+
 def test_parameter_parity_with_vanilla_cd():
     # Same encoder config, shared across groups: parameter count must equal a
     # vanilla CD built from the same pieces (embed + encoder + shared head).
