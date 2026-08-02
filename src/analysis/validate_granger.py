@@ -92,9 +92,14 @@ from generate_leader_follower import (  # noqa: E402  (must follow the sys.path 
     generate,
 )
 
-# statsmodels emits a FutureWarning on every call to grangercausalitytests (verbose is being deprecated) regardless of
-# verbose=False
-warnings.filterwarnings("ignore", category=FutureWarning, module="statsmodels",)
+# statsmodels emits a FutureWarning on every call to grangercausalitytests
+# (verbose is being deprecated) regardless of verbose=False. Suppress it here
+# so the structured validation output is not buried in warning noise.
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module="statsmodels",
+)
 
 # Significance threshold for all tests.
 _ALPHA: float = 0.05
@@ -124,7 +129,12 @@ def _bivariate_pvalue(data: np.ndarray, cause: int, effect: int) -> float:
     return float(results[_LAG_ORDER][0]["ssr_ftest"][1])
 
 
-def _conditional_pvalue(data: np.ndarray, cause: int, effect: int, controls: list[int],) -> float:
+def _conditional_pvalue(
+    data: np.ndarray,
+    cause: int,
+    effect: int,
+    controls: list[int],
+) -> float:
     """F-test p-value for 'cause -> effect' conditional on control variables.
 
     Tests whether lagged cause[t-1] improves prediction of effect[t] after controlling for lagged effect[t-1] and lagged
@@ -154,7 +164,11 @@ def _conditional_pvalue(data: np.ndarray, cause: int, effect: int, controls: lis
     return float(scipy_stats.f.sf(F, k_unr - k_res, n - k_unr))
 
 
-def _run_tests(data: np.ndarray, gamma: float, rng: np.random.Generator,) -> pd.DataFrame:
+def _run_tests(
+    data: np.ndarray,
+    gamma: float,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
     """Run the structured Granger test battery.
 
     Args:
@@ -167,7 +181,13 @@ def _run_tests(data: np.ndarray, gamma: float, rng: np.random.Generator,) -> pd.
     """
     rows: list[dict] = []
 
-    def record(direction: str, cause: int, effect: int, pvalue: float, expected: bool,) -> None:
+    def record(
+        direction: str,
+        cause: int,
+        effect: int,
+        pvalue: float,
+        expected: bool,
+    ) -> None:
         rows.append(
             {
                 "direction": direction,
@@ -301,8 +321,13 @@ def run_validation(gamma: float, rho: float, seed: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate Granger causality structure of generated data.")
-    parser.add_argument("--gamma", type=float, nargs="+", default=[0.0, 0.3, 0.6, 0.9],
-                        help="Gamma values to validate (default: 0.0 0.3 0.6 0.9).",)
+    parser.add_argument(
+        "--gamma",
+        type=float,
+        nargs="+",
+        default=[0.0, 0.3, 0.6, 0.9],
+        help="Gamma values to validate (default: 0.0 0.3 0.6 0.9).",
+    )
     parser.add_argument("--rho", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
