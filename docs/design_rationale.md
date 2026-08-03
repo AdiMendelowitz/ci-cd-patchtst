@@ -5,6 +5,11 @@ coding decision made across the synthetic grid, ETTh1, ECL, and leader-follower
 notebooks. The sources are the experiment session logs and the canonical result
 CSVs under `results/`.
 
+Scope: this records the original submission's decisions. Revision-era
+decisions (block-attention variant, revised batch policy, new-run protocol)
+are recorded in docs/revision_master_plan_v2.md, docs/revision_artifact_ledger.md,
+and the module docstrings of the code they concern.
+
 ---
 
 ## 1. Architecture: CI vs CD Implementation

@@ -1,11 +1,18 @@
-# TMLR Revision Master Plan v2.1 — Paper10341 (reviewer yc7L)
+# TMLR Revision Master Plan v2.2 — Paper10341 (reviewer yc7L)
 
 Status: post-critique final; v2.1 amendments (02 Aug, post dry-run): P3 batch
 policy for new-environment families; B2 numeric two-tier trigger applied
 twice; B5/W6 mechanism wording rule; W4 section title; Stage 0 status split
-into completed first half and pending extension. Owner: Adi. Repo: ci-cd-patchtst.
+into completed first half and pending extension. v2.2 amendments (03 Aug,
+post B1): B1 complete with results recorded in the ledger; I1 confirmed from
+main.tex; V1 resolved; Stage 0 extension delivered as a sibling script; B2
+trigger note from committed best_epoch data; G1 evidence in hand pending the
+analyze script. Owner: Adi. Repo: ci-cd-patchtst.
 Main certified at c04d3cb (29 pass, 0 warn, 0 fail); work happens on
-revision/reviewer-yc7L (tip ebba4f2).
+revision/reviewer-yc7L (tip 777c462 = the B1 commit, pushed to origin,
+confirmed by git log 03 Aug). Docs policy 03 Aug:
+this plan and its three sibling docs are maintained LOCAL-ONLY from v2.2
+onward; the committed v2.1 snapshots are frozen (see ledger).
 
 ## 1. State of play (verified this session)
 
@@ -31,10 +38,11 @@ revision/reviewer-yc7L (tip ebba4f2).
   and batch claims are environment-bound; the quadratic-in-C compute
   asymmetry survives (38 -> 513 s/epoch for C 21 -> 84 at fixed batch).
 - Boundary protocol: P=2 uses stride 1 (stated in main.tex; N=511,
-  C*N=10,731). Working inference I1: P=4 uses stride 2 (the P/2 convention;
-  N=255, C*N=5355, nearly identical to the measured ar1_c84 token count, so
-  P=4 CD cost is approximately already measured at ~513 s/epoch). Confirm I1
-  from train_boundary notes at Stage 0; the probe measures it regardless.
+  C*N=10,731). I1 CONFIRMED (03 Aug): main.tex at the branch tip states the
+  sweep uses S = P/2 and gives the P=4 arithmetic C*N = 21x255 = 5355, so
+  P=4 uses stride 2 and its CD cost is approximately the measured ar1_c84
+  ~513 s/epoch. (No train_boundary notebook exists in the repo — the README
+  discloses this — so the paper text is the confirming source.)
 - ECL protocol (from train_ecl.ipynb): proportional split 15840/5256/5256 of
   26352 rows, z-score fit on train only, ddof=0. Test windows at H=96: 4649.
 - ETTh1 coupling partition computed and pre-registered in the script's
@@ -99,10 +107,13 @@ revision/reviewer-yc7L (tip ebba4f2).
 
 ## 5. Stage 0 — measurement probe (gate G0; one session, Adi's account)
 
-Status: first half complete (the original probe measured lf_c21 and ar1_c84,
-CD and CD_Block, batch 128; results in the artefact ledger). The extension
-below remains, and it ships as a new version of the block-attn-dryrun Kaggle
-dataset, never as in-notebook patches.
+Status 03 Aug: first half complete (lf_c21 and ar1_c84, CD and CD_Block,
+batch 128; results in the ledger). Extension DELIVERED as a sibling script
+dryrun_stage0.py (deliberate deviation from "extend": the committed probe
+stays untouched); critiqued and smoke-tested; pending upload as the next
+block-attn-dryrun dataset version and a T4 run. The lf batch-8 cells are
+already answered by B1's live run (CD ~820 s/run, CD_Block ~340 s/run at
+batch 8); remaining G0 value is the boundary and ECL pricing.
 
 Extend dryrun_block_attention.py with: CI mode; lf_c21 CD_Block at batch 8
 (closes the B1 gap); boundary_p4_c21 (stride 2 per I1) and boundary_p2_c21
@@ -114,9 +125,13 @@ fallbacks.
 
 ## 6. Run matrix (priority order; owner; estimate until G0 replaces it)
 
-- B1 Leader-follower three-arm: CD_Block + CI + CD, gamma {0,.3,.6,.9} x 5
-  seeds, committed lf protocol. Owner: Adi. ~10-20 h. Serves Critical 1
-  fallback, the P1 baseline for all lf-family contrasts, and hosts B5.
+- B1 Leader-follower three-arm: COMPLETE 03 Aug. CD_Block + CI + CD, gamma
+  {0,.3,.6,.9} x 5 seeds, committed lf protocol; measured ~8.4 h total (vs
+  the ~10-20 h estimate). 60/60 runs; results and B5 diagnostics in the
+  ledger. Outcome: block attention narrows but does not close the CD
+  penalty (Blk/CI 1.0045-1.0056 vs CD/CI 1.0065-1.0082 at gamma>0);
+  gamma=0 control passed. Served Critical 1, Recommended 2, P1 lf baseline,
+  and B5 as planned.
 - B2 Boundary P=4 completion: CD + CI, gamma grid x 5 seeds, boundary
   protocol, batch 128 per P3. Owner: collaborator C1. Estimate via I1: ~35
   converged epochs x ~513 s x 20 CD runs plus cheap CI runs, ceiling
@@ -126,6 +141,10 @@ fallbacks.
   realistic early-stopped convergence. Tiers: total <= 70 collaborator-hours
   -> full grid; 70-100 -> gamma {0,.6,.9}; > 100 -> existence-proof runs at
   one gamma, remainder argued on the environment-dependence ground.
+  Pre-G0 note (03 Aug, ledger-consulted): committed boundary CD best_epoch
+  max is 12, so realistic convergence is ~22 epochs, not 35; the ceiling
+  drops to ~22 x 513 s x 20 ~ 63 h < 70, provisionally the full-grid tier.
+  Formal application still happens at G0 with the probe's measured s/epoch.
 - B3 Boundary P=2 partial: CD + CI at gamma {.6,.9} x 5 seeds if priced in;
   else one gamma as an existence proof that the cell completes under fused
   attention. Owner: C2. Gradient checkpointing flag available if the probe
@@ -191,13 +210,20 @@ fallbacks.
 
 - G0 Probe complete -> run matrix finalised with measured costs; fallbacks
   triggered or dismissed; I1 confirmed or corrected.
-- G1 B1 analysed -> Critical 1 response wording frozen.
+- G1 B1 analysed -> Critical 1 response wording frozen. Status 03 Aug:
+  results analysed in-session (evidence in hand, direction unambiguous);
+  the freeze itself waits for analyze_block_attention.py with its oracle
+  (P4 makes the script the canonical analysis, not the chat).
 - G2 All planned CSVs committed; analyze scripts with passing oracle checks;
   certification script extended to run the new analyses; certification
   green on the branch.
 - G3 Branch merged to main; certification green on main; anonymity sweep
   (name, GitHub URL, Kaggle usernames, local paths) passes; single mirror
-  cut; Phase 2 submission.
+  cut; Phase 2 submission. Named sweep items so far: the as-ran
+  notebooks/train_block_attention.ipynb (hard-coded INPUT_ROOT embeds the
+  Kaggle username; restore Path("/kaggle/input") in the mirror copy) and
+  the docs/ directory (local-only from 03 Aug; the stale v2.1 snapshots
+  committed at 8451b5d ship scrubbed or docs/ is excluded from the mirror).
 
 ## 10. Risks and mitigations
 
@@ -231,16 +257,18 @@ fallbacks.
 
 ## 12. Remaining open items
 
-- OQ1' Confirm I1 (P=4 stride 2) from train_boundary notes; the probe
-  measures the config either way.
+- OQ1' RESOLVED 03 Aug: I1 confirmed from main.tex at the branch tip
+  (S = P/2; C*N = 21x255 = 5355 stated for P=4).
 - OQ3 Collaborator availability windows (shapes B2/B3 scheduling and the
-  gamma-split decision).
-- V1 OpenReview reviewer-assignment status (scheduled, week 1).
+  gamma-split decision). STILL OPEN — now the only blocker for B2/B3.
+- V1 RESOLVED 02 Aug: single reviewer confirmed on the form's reader list
+  at Phase-1 posting; A1 stands. Re-check once before Phase 2 submission.
 
 ## 13. Deliverables checklist (endgame)
 
-- [ ] Phase 1 official comment posted (writing-only items + ETA)
-- [ ] results_block_attention.csv + analyze_block_attention.py + oracle
+- [x] Phase 1 official comment posted 02 Aug (writing-only items + ETA)
+- [~] results_block_attention.csv COMMITTED 03 Aug (777c462);
+      analyze_block_attention.py + oracle PENDING (next artefact)
 - [ ] results_boundary_p4_full.csv (and P=2 partial) + boundary analysis
       update
 - [ ] results_etth1_rerun.csv + etth1_coupling_partition.csv + subgroup
