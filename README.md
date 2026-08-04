@@ -26,9 +26,12 @@ compute, CI is the better default.
 ## Key result
 
 On the AR(1) grid the grand-mean CD minus CI difference is +0.0013 MSE over five
-seeds, with a 95% confidence interval of [-0.0002, +0.0028] and a half-width of
-0.0063 MSE, so any uniform CD gain above roughly 0.63% of the CI mean would have
-moved the interval off zero. None did. A fair-protocol robustness suite,
+seeds, with a 95% confidence interval of [-0.0002, +0.0028] (+0.13% of the CI
+mean, inside the pre-registered 1% band). Separately, the per-cell 95%
+detection half-width is 0.0063 MSE, about 0.63% of the CI mean: the smallest
+per-cell mean difference whose interval would exclude zero, so any per-cell CD
+advantage, where present, is bounded below that half-width — a measured bound,
+not a mere failure to reject. A fair-protocol robustness suite,
 consisting of selection at each model's own validation minimum, matched
 gradient-update budgets, a cross-variate prediction head, and the
 block-covariance family, shows that the apparent CD deficit under lagged coupling
@@ -53,6 +56,8 @@ ci-cd-patchtst/
   src/
     models.py                 PatchTST CI and CD modes, the PatchTST_CD_Head
                               cross-variate head, TrueDLinear, and build_model
+    models_cd_block.py        block-wise cross-variate attention CD variant
+                              (revision, B1)
     generators/
       generate_leader_follower.py   leader-follower VAR(1) generator
       generate_block_cov.py         block-covariance AR(1) generator
@@ -67,14 +72,21 @@ ci-cd-patchtst/
       analyze_block_cov.py          Section 5.4
       analyze_equiv_table.py        Table 8
       validate_granger.py           Section 2.1 Granger non-causality
+      partition_etth1_coupling.py   ETTh1 coupling-partition scoring (revision, B4)
       paired_stats.py               shared paired-difference library
     tests/
       test_experiments.py
+      test_cd_block.py
       conftest.py
   notebooks/                  training notebooks (Kaggle T4); see note below
+    original/                 original boundary training notebooks, retrieved
+                              2026-08-04 (see Notebooks)
   results/                    committed result CSVs (see inventory below)
-  docs/
-    design_rationale.md
+    Revision/                 revision-era result CSVs (in progress; see
+                              inventory note below)
+  docs/                       internal working documents (frozen snapshots;
+                              local copies are canonical; excluded from the
+                              anonymised distribution)
 ```
 
 The cross-variate head is the class `PatchTST_CD_Head` inside `src/models.py`.
@@ -149,8 +161,9 @@ could drift from the paper. Figure-producing scripts write their PNG into
 
 ## Results CSV inventory
 
-`results/` holds twelve CSVs, each the committed input to one analysis script
-(`equiv_summary.csv` is also written by `analyze_equiv_table.py`):
+`results/` holds the twelve analysis-input CSVs below, each the committed
+input to one analysis script (`equiv_summary.csv` is also written by
+`analyze_equiv_table.py`), plus the revision-era files noted after the list:
 
 - `results_grid.csv` -- AR(1) grid (Table 3, Figure 1, Section 3)
 - `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL (Tables 4 and 5, Figure 2)
@@ -162,25 +175,42 @@ could drift from the paper. Figure-producing scripts write their PNG into
 - `results_block_cov.csv` -- block-covariance family (Section 5.4)
 - `equiv_summary.csv` -- practical-equivalence summary (Table 8)
 
+Revision-era result CSVs live under `results/Revision/` (currently the
+block-attention ablation pair), and `results/etth1_coupling_partition.csv`
+sits alongside the twelve above; they belong to the in-progress revision and
+their provenance is maintained internally.
+
 ## Notebooks
 
-The `notebooks/` directory holds seven training notebooks, each run on a Kaggle T4
-GPU, that produced the result CSVs: leader-follower, ETTh1, ECL, DLinear,
-cross-variate head, equal compute, and block covariance. The AR(1) grid and the
-boundary patch-size sweep are not among them; see Reproducing from scratch.
+The `notebooks/` directory holds the training notebooks, each run on a Kaggle
+T4 GPU, that produced the result CSVs: leader-follower, ETTh1, ECL, DLinear,
+cross-variate head, equal compute, block covariance, and (revision-era) the
+block-wise cross-variate attention ablation. The AR(1) grid and the boundary
+patch-size sweep are not among them; the boundary sweep's original notebooks
+are committed separately under `notebooks/original/` (see Reproducing from
+scratch), and the AR(1) grid remains CSV-only.
 
 ## Reproducing from scratch
 
 Reproducing every table and figure from the committed CSVs needs only the analysis
 scripts above and the CPU stack installed by `uv sync` or the requirements files.
-Retraining the models from raw synthetic data is partially supported. The seven
-notebooks retrain the experiments listed above on a single T4. The AR(1) grid and
-the boundary patch-size sweep are the exception: their training notebooks
-(`train_grid.ipynb`, `train_boundary.ipynb`) and the AR(1) compound-symmetry
-generator (`generate_compound.py`) are not committed, so those two experiments
-reproduce from their committed CSVs but cannot be retrained from this repository.
-The leader-follower and block-covariance generators under `src/generators/` are
-committed.
+Retraining the models from raw synthetic data is partially supported. The
+training notebooks under `notebooks/` retrain the experiments listed above on a
+single T4. The AR(1) grid is the exception: its training notebook
+(`train_grid.ipynb`) and the AR(1) compound-symmetry generator
+(`generate_compound.py`) are not committed, so that experiment reproduces from
+its committed CSVs but cannot be retrained from this repository. The boundary
+patch-size sweep's original training notebooks were retrieved on 2026-08-04
+from the Kaggle environment in which they ran and are committed byte-identical
+under `notebooks/original/` (`train_boundary_*.ipynb`); they are
+Kaggle-environment notebooks (T4, `/kaggle/working` paths). They retrain the
+boundary grid (P in {2, 8, 16}) at n=5 and the P=4 CI cells at n=3 on that
+platform; the notebook version that extended P=4 CI to n=5 is pending retrieval
+from the Kaggle version history (see `notebooks/original/README.md`).
+The boundary notebooks define their own data generation and windowing, which
+differ from the other engines under `notebooks/`; `notebooks/original/README.md`
+records each file's role and SHA256 and the shared protocol. The leader-follower and block-covariance generators under
+`src/generators/` are committed.
 
 ## License
 
