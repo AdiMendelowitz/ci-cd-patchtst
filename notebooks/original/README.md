@@ -46,13 +46,16 @@ retrain their experiments on that platform.
 
 ## File hashes
 
-SHA256 of each file, for verification against any copy:
+SHA256 of each file, for verification against any copy. The notebooks are as
+they ran, except for a comment reworded in `train_boundary_p4_ci.ipynb` and
+`train_boundary_p4_full_plan.ipynb`; no code, configuration, or output
+differs.
 
 | File | SHA256 |
 |---|---|
 | `train_boundary_grid_n3.ipynb` | `3fd70587b1004e0d38de6fd5d1321a1e0675f557db00b441574845fdf6d1e2f2` |
 | `train_boundary_grid_n5.ipynb` | `fc961690559a6f6c69caee288663253d24ef1719856501bc94e05346b470356d` |
 | `train_boundary_grid_n5_resume.ipynb` | `eb784961c818a24b683217ca083e74ca5b18a39635945648dd15824f90283c2b` |
-| `train_boundary_p4_ci.ipynb` | `f03dcf470180739347fc4532eeca02e3265efbeb9049bce47c17898991b8e78b` |
+| `train_boundary_p4_ci.ipynb` | `2312893dfcdaa39012d79e0b642697446ae5cf9f8dc86f25669219af71a78e41` |
 | `train_boundary_p4_ci_dlinear.ipynb` | `030d4c20bd05a8bd27de969eda151aaa075292c6dea33ef08217f103c3d8b4dd` |
-| `train_boundary_p4_full_plan.ipynb` | `6b8235e64374cd614789d1d40881bd2770d9bb6f02ea6e120b0727c46e680d7c` |
+| `train_boundary_p4_full_plan.ipynb` | `e81c8800c56de37d410a6b584876332807cbfe86698f5df0520f2934de708ee9` |
