@@ -183,6 +183,17 @@ training data volume. The 60/20/20 split follows the iTransformer paper's ECL
 protocol and is the most common convention in the long-term forecasting
 literature.
 
+### Boundary-sweep exception (recorded 04 Aug 2026)
+
+The boundary patch-size notebooks did not use this data protocol: their
+generator draws iid innovations (no cross-channel covariance), NOISE_STD=0.1,
+over T=20,000 timesteps split 70/10/20 with no burn-in and a noise-initialised
+first state, and their CSVs' rho=0.5 is a hardcoded metadata constant. The
+rationale for that deviation was not recorded at the time; the reconstruction
+and its consequences live in scripts_provenance.md Part I §5 and
+revision_artifact_ledger.md (04 Aug 2026 entry). This section's rationale applies to the AR(1) grid,
+leader-follower, and derived experiments only.
+
 ### Why 1,000 burn-in steps
 
 AR(1) with phi=0.8 mixes fast enough that 1,000 steps provides a comfortable
@@ -501,8 +512,8 @@ and emits the statistics and figures for its part of the paper, so the script
 output and the paper text are checked against each other before anything is
 written. The synthetic grid is `results_grid.csv` (five seeds, nine
 cells, three modes), the leader-follower sweep is `results_leader_follower.csv`,
-the matched-budget ETTh1 runs are in the ETTh1 results CSV, the boundary sweep
-has its own CSV, and the ECL CI-only runs are in the ECL results CSV. The three
+the matched-budget ETTh1 runs are in `results_etth1.csv`, the boundary sweep
+is `results_boundary.csv`, and the ECL CI-only runs are in `results_ecl.csv`. The three
 fair-protocol robustness controls (cross-variate head, matched compute, and
 block covariance) each have their own canonical CSV and analysis script.
 
