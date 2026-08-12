@@ -36,7 +36,7 @@
         shared head rather than the encoder. Matching the gradient-update budget across modes removes the deficit, which rules
         out the per-epoch step-count asymmetry as its source, and a block-covariance family carries the same no-advantage finding
         beyond compound-symmetry correlation. Across every tested synthetic cell (AR(1), leader-follower, and block-covariance)
-        the absolute CD$-$CI difference stays inside a pre-registered $1\%$ relative-MSE band in both directions. What does not
+        the absolute CD$-$CI difference stays inside a pre-specified $1\%$ relative-MSE band in both directions. What does not
         equalise is cost: CD requires smaller feasible batches and far more gradient steps per epoch, its batch size collapses
         to one at $C=84$, and at $C=321$ (ECL) the flattened-token formulation does not finish under a single-T4 budget while CI
         trains stably. On the observational ETTh1 ($C=7$), a matched-budget comparison still gives CI a modest but reliable edge
@@ -182,9 +182,12 @@
 
     \textbf{Dynamical structure.} Because the transition operator $\phi\mathbf{I}$ is diagonal, each variate's next value
     depends only on its own past. Granger non-causality holds exactly across all channel pairs: all cross-variate dependence
-    arises from the contemporaneous covariance $\Sigma$, not from the dynamics. The stationary lagged cross-covariance
-    between channels $i \neq j$ at any lag $k > 0$ is zero, because $A^k = (\phi\mathbf{I})^k = \phi^k \mathbf{I}$ has zero
-    off-diagonal entries at every power. Contemporaneous correlation in $\Sigma$ does not provide a predictive signal
+    arises from the contemporaneous covariance $\Sigma$, not from the dynamics. The transition matrix
+    $A^k = (\phi\mathbf{I})^k = \phi^k \mathbf{I}$ has zero off-diagonal entries at every power, so no channel's past
+    dynamically informs another channel's future: there are no cross-channel dynamical coefficients. This does not mean
+    lagged cross-covariance between $\Sigma$-correlated channels is exactly zero at every $k$, but that no such covariance,
+    were it present, would carry Granger-predictive information beyond what each channel's own history already gives.
+    Contemporaneous correlation in $\Sigma$ does not provide a predictive signal
     because innovations are unobserved at prediction time. The leader-follower experiments in Section~\ref{sec:analysis}
     introduce the complementary case where the transition operator structurally links one variate's future to another's past.
 
@@ -215,7 +218,7 @@
     PatchTST is the backbone for both CI and CD modes because the two modes differ in exactly one thing: whether
     self-attention operates within each variate's patch sequence independently or across all variates' patch sequences
     jointly. Patch extraction, linear projection, Transformer encoder, training procedure, and hyperparameters are otherwise
-    shared, making this the most direct available test of the CI/CD distinction without entangling it with other
+    shared, making this the most direct available test of the CD/CI distinction without entangling it with other
     architectural choices. iTransformer would confound the comparison with its inverted embedding design; Crossformer with
     its two-stage routing attention. All findings are conditioned on PatchTST's patch-based representation and the lookback
     window and patch granularity used.
@@ -230,7 +233,10 @@
     concatenated along the sequence dimension before the encoder, giving an input of shape $(B,\, C \cdot N,\, D)$.
     Self-attention operates over all $C \cdot N$ tokens simultaneously, allowing the model to attend across variates. After
     encoding, the output is split back into $C$ per-variate representations before a shared linear head projects each
-    variate to the prediction horizon. The encoder mixes cross-variate information; the head does not.
+    variate to the prediction horizon. The encoder mixes cross-variate information; the head does not. Tokens carry no
+    explicit channel-identity or temporal-position embedding; both are encoded solely through fixed ordering,
+    channel-major for CD (all $N$ patches of channel 0, then channel 1, and so on) and the natural patch sequence for CI.
+    This holds for every CD result reported in this paper.
 
     For the synthetic experiments and ETTh1 we use $L = 512$, $P = 16$, $S = 8$, giving
     \begin{equation}
@@ -283,8 +289,10 @@
 
     \begin{table}[H]
         \centering
-        \caption{Batch sizes and gradient update counts per epoch by mode and $C$.
-        The Ratio column is CD steps / CI steps.}
+        \caption{Batch sizes and gradient update counts per epoch by mode and $C$. The Ratio column is CD steps / CI
+        steps. At $C=84$, steps/epoch reflects the 7,433-window figure (seeds $\{42, 123, 456\}$); seeds $\{789, 1011\}$ used
+        a longer series (8,033 windows, Table~\ref{tab:synth_protocols}), so their per-epoch step counts differ proportionally,
+        though CD/CI ratios are unaffected since both modes of a given seed share that seed's window count.}
         \label{tab:batch_sizes}
         \begin{tabular}{cccccr}
             \toprule
@@ -331,7 +339,7 @@
     for $\rho \in \{0.1, 0.5\}$, and at $C = 84$ for $\rho \in \{0.5, 0.9\}$; CD leads marginally at $C = 21$, $\rho = 0.9$ and at $C = 84$, $\rho = 0.1$. At $C \in \{21, 84\}$
     DLinear is consistently worse than both PatchTST variants, confirming that the Transformer representations add value
     once dimensionality increases. At $C = 7$, DLinear is within roughly $1\%$ of the PatchTST variants across $\rho$ and
-    occasionally slightly better; the CI/CD comparison remains the central question and both variants behave identically
+    occasionally slightly better; the CD/CI comparison remains the central question and both variants behave identically
     regardless of the DLinear baseline's position.
 
     \begin{table}[H]
@@ -422,7 +430,7 @@
     \paragraph{ECL ($C = 321$).} CD training is infeasible at this scale (Section~\ref{sec:setup}): each CD epoch takes
     about 5000\,s on the T4, so a run exceeds the 12-hour session limit well before the 16\,GB VRAM binds. CI results across
     all four horizons appear in Table~\ref{tab:ecl}, with negligible cross-seed variance (CV below 0.5\% at every horizon).
-    No CI/CD significance test is reported, because the CD numbers do not exist. ECL is included as evidence of the scaling
+    No CD/CI significance test is reported, because the CD numbers do not exist. ECL is included as evidence of the scaling
     boundary of this CD formulation rather than as a performance benchmark, and the infeasibility is itself a scoped
     finding, specific to PatchTST's flattened-token tokenisation rather than to channel dependence as a concept.
 
@@ -463,7 +471,7 @@
     pairs.
 
     Both datasets sit between the AR(1) grid (instantaneous correlation only) and the leader-follower regime (explicit
-    structural lagged coupling). The ETTh1 and ECL results are contextual evidence about CI/CD behaviour in realistic
+    structural lagged coupling). The ETTh1 and ECL results are contextual evidence about CD/CI behaviour in realistic
     settings, not controlled tests of the coupling-structure hypothesis.
 
 
@@ -615,10 +623,11 @@
     The leader-follower $P = 16$ sweep raises a question the main protocol cannot answer on its own: the apparent CD$-$CI
     gap grows with $\gamma$ (Section~\ref{sec:analysis}), which could mean CD is genuinely worse under stronger coupling, or
     could mean the early-stopping protocol selects CD at a disadvantage. This section dissects that gap with four controls,
-    each isolating one confound, and then summarises the resulting effect sizes against a pre-registered threshold. We fix
-    the practical-equivalence threshold at $1\%$ of the CI mean test MSE, chosen before these controls were run;
-    differences smaller than this in either direction are treated as practically irrelevant regardless of statistical
-    significance.
+    each isolating one confound, and then summarises the resulting effect sizes against a pre-specified threshold. We fix
+    the practical-equivalence threshold at $1\%$ of the CI mean test MSE, pre-specified before these robustness controls
+    were run; differences smaller than this in either direction are treated as practically irrelevant regardless of
+    statistical significance. This is an operational cutoff on observed effect sizes, not a formal statistical-equivalence
+    claim over the reported confidence intervals.
 
     \subsection{Overtraining and Selection}
     \label{subsec:overtrain}
@@ -656,7 +665,7 @@
         \label{fig:diag_overlay}
     \end{figure}
 
-    \subsection{Matched Compute}
+    \subsection{Matched Update Budget}
     \label{subsec:equalcompute}
 
     At $C = 21$ the original protocol gives CD many more gradient updates per epoch than CI (Table~\ref{tab:batch_sizes}),
@@ -707,7 +716,7 @@
 
     Table~\ref{tab:equiv} collects the controlled synthetic effect sizes with the selection rule used for each, so that
     cells evaluated under different protocols are never pooled. Across all tested AR(1), leader-follower, and
-    block-covariance cells, the absolute CD$-$CI difference stays within the pre-registered $1\%$ relative-MSE threshold in
+    block-covariance cells, the absolute CD$-$CI difference stays within the pre-specified $1\%$ relative-MSE threshold in
     both directions. For the AR(1) grid this holds cell by cell as well as in aggregate: no single cell exceeds $0.56\%$ of
     its CI mean (Section~\ref{sec:results}), so the grand-mean row of Table~\ref{tab:equiv} does not average over any
     cell that breaches the threshold. Some differences are statistically detectable in one direction or the other, but none
@@ -718,7 +727,7 @@
         \centering
         \caption{Controlled synthetic effect sizes, CD$-$CI in test MSE, each with the selection rule under which it was
         computed. Cells under different rules are never pooled. ``Rel'' is the difference as a percentage of the
-        CI mean; the final column reports whether the absolute difference stays within the pre-registered $1\%$
+        CI mean; the final column reports whether the absolute difference stays within the pre-specified $1\%$
             threshold.}
         \label{tab:equiv}
         \small
@@ -812,7 +821,7 @@
     The CD architecture used in the main experiments applies a per-variate head after the joint encoder, so cross-variate
     information from the encoder is not explicitly pooled during prediction. For RQ1 this is not a concern: the AR(1) design
     contains no lagged cross-channel signal by construction, so if the encoder attending across all $C \cdot N$ tokens
-    produces no CI/CD gap, no head design could manufacture one from a signal that is absent. For the leader-follower
+    produces no CD/CI gap, no head design could manufacture one from a signal that is absent. For the leader-follower
     experiments the head-fairness control in Section~\ref{subsec:cdhead} addresses this objection in part: a cross-variate
     head ties CI at every $\gamma$ and removes the coupling-dependent widening, which places that widening in the head rather
     than the encoder. What the control does not establish is that some other head design could turn the lagged signal into a
@@ -887,7 +896,7 @@
     correlation. This null is not only empirical: the closed-form sandwich bound derived in Section~\ref{sec:theoretical_bound}
     has already collapsed to zero width at $h=96$ for every tested coupling strength, so the near-parity result is the
     one the generative model predicts, not merely the one the training runs happened to produce. No tested synthetic cell shows
-    an absolute CD$-$CI difference outside a pre-registered
+    an absolute CD$-$CI difference outside a pre-specified
     $1\%$ relative-MSE threshold in either direction, so on these controlled processes neither mode holds a practically
     relevant accuracy advantage once it is selected fairly.
 
