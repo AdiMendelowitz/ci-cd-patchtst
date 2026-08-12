@@ -46,12 +46,27 @@ retrain their experiments on that platform.
 
 ## File hashes
 
-SHA256 of each file, for verification against any copy. The notebooks are as
-they ran, except for a comment reworded in `train_boundary_p4_ci.ipynb` and
-`train_boundary_p4_full_plan.ipynb`; no code, configuration, or output
-differs.
+SHA256 of each file as originally committed (04 Aug 2026), for verification
+against any copy from that commit. The notebooks are as they ran, except
+for a comment reworded in `train_boundary_p4_ci.ipynb` and
+`train_boundary_p4_full_plan.ipynb` at retrieval time; no code,
+configuration, or output differs from the as-ran files.
 
-| File | SHA256 |
+STALE NOTICE (09 Aug 2026): a repository-wide terminology sweep
+(scripts_provenance.md Part K) subsequently renamed each file's markdown
+title cell — `Account A`/`Account B` became `Slice A`/`Slice B` — in all
+six files below. Only that markdown text changed; no code, configuration,
+or output cell was touched by the sweep, so the training protocol
+documented above remains accurate and verified as stated. But every hash
+in the table below now describes the pre-sweep file and will NOT match
+the current on-disk or currently-committed copy. Recomputation against
+the current files is owed before this table can be used for verification
+again; the values below are retained as the historical record of the
+04 Aug retrieval commit, not deleted, per this project's own artefact
+discipline (a wrong hash left silently in place is worse than no hash —
+mark and recompute, never leave standing).
+
+| File | SHA256 (04 Aug 2026 commit — STALE, see notice above) |
 |---|---|
 | `train_boundary_grid_n3.ipynb` | `3fd70587b1004e0d38de6fd5d1321a1e0675f557db00b441574845fdf6d1e2f2` |
 | `train_boundary_grid_n5.ipynb` | `fc961690559a6f6c69caee288663253d24ef1719856501bc94e05346b470356d` |
