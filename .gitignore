@@ -63,6 +63,9 @@ src/probes/dryrun_block_attention.py
 tmlr/
 docs/
 /docs/
-results/Revision/train_boundry_p4/
+results/Revision/train_boundary_p4/
 
 .claude/
+/results/Revision/ecl_ci_cd_train_resumable/
+/results/Revision/train_etth1_b4/
+/results/Revision/train_grid_c84_block_attn/
