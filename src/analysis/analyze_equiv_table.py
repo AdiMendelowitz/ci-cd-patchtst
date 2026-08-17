@@ -23,18 +23,15 @@ Row -> source map (column noted where a row reads a non-default metric column):
   Block-cov C=84 rho_in=0.9, early-stop            results_block_cov.csv
 
 The val-minimum row reads test_upd_global (best validation update), not
-test_epoch_global. practical_equivalence_tables.md in the source tree is stale on
-two points and is not trusted: it cites results_block_cov_v2.csv with the
-C=84 rho_in=0.9 cell at n=1; the committed results_block_cov.csv is the n=5 cut,
-which gives +0.0000 as in main.tex.
+test_epoch_global. An earlier row specification cited results_block_cov_v2.csv
+with the C=84 rho_in=0.9 cell at n=1; the canonical results_block_cov.csv is
+the n=5 cut, which gives +0.0000 as in main.tex.
 
 Run from a clean checkout:
 
     python analyze_equiv_table.py
     python analyze_equiv_table.py --results-dir path/to/results --out-csv out.csv
 """
-
-from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass

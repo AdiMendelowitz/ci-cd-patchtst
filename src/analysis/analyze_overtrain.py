@@ -41,8 +41,6 @@ Run from a clean checkout:
                                 --diag-csv path/to/diag.csv
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

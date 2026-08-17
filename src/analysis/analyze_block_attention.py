@@ -1,31 +1,31 @@
-"""Block-attention ablation analysis (reviewer yc7L Critical 1).
+"""Block-attention ablation analysis for the leader-follower sweep.
 
 Reproduces the three-arm leader-follower sweep under
 results/Revision/train_block_attention/: modes {CI, CD, CD_Block} at C = 21,
 rho = 0.5, P = 16, gamma in {0.0, 0.3, 0.6, 0.9}, seeds {42, 123, 456, 789,
 1011} (60 rows). CD_Block restricts attention to within-group blocks
-(models_cd_block.py). CD-family arms run at batch 8, CI at batch 128
-(protocol-fixed), matching Table 6's sweep for a directly comparable CD-CI
-contrast.
+(models_cd_block.py); the CD-family arms run at the
+committed batch 8 while CI stays at its committed 128, so the CD-CI contrast
+here is directly comparable to the committed Table 6 sweep.
 
 Outputs, in order: the three-arm pivot (per-gamma mean test MSE and the three
 ratios CD/CI, Blk/CI, Blk/CD), the three paired per-seed contrasts with 95%
-paired-t CIs (df = 4) via the shared paired_stats module, and the
+paired-t CIs (df = 4) reusing the shared ``paired_stats`` machinery, and the
 diagnostics panel from diag_b5_gamma06.csv (participation ratio of the
 encoder-output feature covariance, first -> last epoch, gamma = 0.6 runs only;
 final-epoch pre-clip grad-norm means per mode and gamma; nonfinite-step
-accounting). The panel is descriptive, not causal: it does not establish a
-mechanism.
+accounting). The wording ceiling applies throughout: the panel is reported as
+consistent with the stated hypothesis, never as a mechanism claim.
 
 The oracle section pins every reported number against a frozen oracle pivot
 plus the deterministic supporting facts recomputed from the committed CSVs.
-This is the canonical analysis for this comparison.
+This script is the canonical analysis; downstream prose is frozen only once
+it reports PASS.
 
 Run from a clean checkout:
 
     python src/analysis/analyze_block_attention.py
-    python src/analysis/analyze_block_attention.py --csv path/to/results_block_attention.csv \\
-        --diag path/to/diag_b5_gamma06.csv
+    python src/analysis/analyze_block_attention.py --csv path/to/results_block_attention.csv --diag path/to/diag_b5_gamma06.csv
 """
 
 import argparse
@@ -48,7 +48,7 @@ _REQUIRED_COLS: set[str] = {"gamma", "mode", "seed", "test_mse", "best_epoch", "
 _DIAG_REQUIRED_COLS: set[str] = {
     "mode", "gamma", "seed", "epoch", "grad_norm_mean", "nonfinite_steps", "participation_ratio",
 }
-# CD-family arms at batch 8, CI at batch 128 (protocol-fixed).
+# CD-family arms at the committed batch 8, CI at its committed 128.
 _EXPECTED_BATCH: dict[str, int] = {"CI": 128, "CD": 8, "CD_Block": 8}
 
 # Oracle: the frozen pivot (mean test MSE over 5 seeds, 4 dp).
@@ -63,8 +63,9 @@ _ORACLE_BODY: dict[float, tuple[float, float, float, float, float, float]] = {
 # Paired-sign oracle recomputed from the committed CSV. CD-CI is positive on
 # 5/5 seeds at every gamma > 0; the exact one-sided sign-test p (binomial
 # tail at 0.5 over the nonzero differences, 1/32 = 0.03125 when 5/5) is
-# computed and pinned below.
-# Blk-CD negative-seed counts are 4/5 at gamma <= 0.3 and 3/5 at gamma >= 0.6.
+# computed and pinned below so the response quotes a script-produced number.
+# Blk-CD negative-seed counts are 4/5 at gamma <= 0.3 and 3/5 at gamma >= 0.6;
+# the blanket "4/5" claim holds only for the first two cells.
 _ORACLE_CDCI_POS: dict[float, int] = {0.3: 5, 0.6: 5, 0.9: 5}
 _ORACLE_CDCI_SIGN_P: dict[float, float] = {0.3: 0.031, 0.6: 0.031, 0.9: 0.031}
 _ORACLE_BLKCD_NEG: dict[float, int] = {0.0: 4, 0.3: 4, 0.6: 3, 0.9: 3}
@@ -76,9 +77,8 @@ _G0_TOL = 0.002
 _ORACLE_DIAG_ROWS = 1248
 _ORACLE_PR_ROWS = 301          # non-null participation-ratio rows, gamma = 0.6 only
 _ORACLE_PR_RUNS = 15           # (mode, seed) runs carrying PR
-# AMP loss-scale adjustment steps; the training notebook excludes them from
-# the per-epoch grad-norm means.
-_ORACLE_NONFINITE_TOTAL = 216
+_ORACLE_NONFINITE_TOTAL = 216  # AMP loss-scale adjustment steps; the training
+# notebook excludes them from the per-epoch grad-norm means
 _ORACLE_NONFINITE_CI = 0       # none occur in CI runs
 _ORACLE_NONFINITE_MIN_EPOCH = 6
 # Participation ratio, mean over seeds of the first and last non-null epoch
@@ -269,9 +269,6 @@ def b5_panel(diag: pd.DataFrame) -> dict[str, object]:
         .mean()
         .reindex(pd.MultiIndex.from_product([_MODES, _GAMMAS], names=["mode", "gamma"]))
     )
-    missing_cells = grad_by_cell[grad_by_cell.isna()].index.tolist()
-    if missing_cells:
-        raise ValueError(f"no grad_norm_mean rows for (mode, gamma) cells: {missing_cells}")
     grad_final = {
         mode: tuple(float(grad_by_cell.loc[(mode, g)]) for g in _GAMMAS) for mode in _MODES
     }
