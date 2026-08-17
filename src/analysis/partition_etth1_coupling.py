@@ -2,12 +2,12 @@
 
 Purpose
 -------
-Reviewer yc7L (recommended item 1) asks for CI/CD MSE gaps on high-coupling and
-low-coupling subsets of the ETTh1 test set. This script computes the partition:
-one row per test input window, carrying two window-level coupling metrics and a
-per-horizon high/low flag at that horizon's median. The per-window forecast
-errors come separately from an instrumented rerun of the ETTh1 notebook; the
-subgroup analysis script joins the two on window_start.
+Supports a per-subset accuracy comparison: CI and CD MSE on high-coupling
+versus low-coupling subsets of the ETTh1 test set. This script computes the
+partition: one row per test input window, carrying two window-level coupling
+metrics and a per-horizon high/low flag at that horizon's median. The
+per-window forecast errors come separately from an instrumented rerun of the
+ETTh1 notebook; the subgroup analysis script joins the two on window_start.
 
 Metrics
 -------
@@ -178,8 +178,7 @@ def print_summary(part: pd.DataFrame) -> None:
 
 
 _ORACLE: dict[str, float | int] = {
-    # Canonical-ETTh1 targets (4 dp where float), first computed 02 Aug 2026
-    # and recorded in docs/revision_artifact_ledger.md.
+    # Canonical-ETTh1 targets (4 dp where float).
     "diffed_mean": 0.0828,
     "diffed_sd": 0.0177,
     "spearman": -0.2791,
