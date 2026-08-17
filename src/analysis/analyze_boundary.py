@@ -3,15 +3,22 @@
 Reads
 -----
 results_boundary_p4_ci.csv
-    CI only at P=4, gamma in {0.6, 0.9}. CD at P=4 is excluded because
-    21 x 255 = 5355 tokens exceeds T4 VRAM at any viable batch size.
+    CI only at P=4, gamma in {0.6, 0.9}, original environment. Superseded at
+    P=4 by the current-environment tranche below wherever the two overlap; kept
+    as the original-environment reference the paper's earlier P=4 cells cite.
 
 results_boundary.csv
-    P in {2, 8, 16}.
+    P in {2, 8, 16}, original environment.
       P=2:  CI only at gamma in {0.6, 0.9} (CD infeasible: 21 x 511 = 10731
             tokens). gamma in {0.0, 0.3} were not run.
       P=8:  CI and CD at gamma in {0.0, 0.3, 0.6, 0.9}.
       P=16: CI and CD at gamma in {0.0, 0.3, 0.6, 0.9}.
+
+results_boundary_p4*_complete.csv  (optional, zero or more)
+    Current-environment CI and CD at P=4, one merged file per gamma, produced by
+    merge_boundary_p4.py. When supplied, these rows replace any P=4 row carrying
+    the same (gamma, mode, seed) key from the original-environment reference, so
+    the two environments are never pooled within a cell.
 
 Seed count per cell is read from the data rather than assumed; the script reports
 whatever n is present and a mixed-n merge is flagged loudly.
@@ -23,15 +30,15 @@ Both CSVs share the schema:
 Writes
 ------
 Results/figures/boundary_heatmap.png
-    Partial (P, gamma) grid of the CD/CI MSE ratio where both modes were run
-    (P in {8, 16}, all gamma). Cells where CD was not run are grey N/A. The
-    colour range is data-driven (max observed deviation times 1.1, floor 0.002).
+    Partial (P, gamma) grid of the CD/CI MSE ratio at every patch size where both
+    modes were run. Cells where CD was not run are grey N/A. The colour range is
+    data-driven (max observed deviation times 1.1, floor 0.002).
 
 Console
 -------
-CI-only summary at P in {2, 4}; per-cell paired CD-CI differences with 95% t-CIs
-for P in {8, 16}; the step-count table read from the CSV; the regression on
-paired differences, including a slope-homogeneity check across patch sizes and a
+CI-only summary at CD-absent patch sizes; per-cell paired CD-CI differences with
+95% t-CIs at every paired patch size; the step-count table read from the CSV; the
+regression on paired differences, including a slope-homogeneity check and a
 seed-clustered refit; and a ready-to-paste LaTeX paragraph.
 
 Paths
@@ -41,18 +48,37 @@ CSVs under results/ at the repository root and figures written to paper/figures/
 Both default paths are resolved against those
 candidate directories; pass explicit paths to override:
 
-    python analyze_boundary.py [path/to/results_boundary_p4_ci.csv path/to/results_boundary.csv]
+    python analyze_boundary.py [p4_ci.csv boundary.csv [p4_complete.csv ...]]
 
 Statistical design
 ------------------
 Primary object: d = MSE_CD - MSE_CI per (patch_size, gamma, seed), pivoted within
 each triple to exploit the matched design. The slope of d on gamma is fitted on
-the paired cells only (P in {8, 16}); CD is structurally absent at P=2 and P=4
-because of memory, not random omission, so those cells are excluded from the
-paired analysis and the P in {2, 4} by gamma interaction is not estimable. The
-gamma effect is checked for homogeneity across the two paired patch sizes, and
-the slope is refitted with seed-clustered standard errors because the five seeds
+the regression-eligible cells only, defined as the paired patch sizes drawn from
+results_boundary.csv (P in {8, 16}); CD is structurally absent at P=2 because of
+memory, not random omission, so the P=2 by gamma interaction is not estimable.
+The gamma effect is checked for homogeneity across those patch sizes, and the
+slope is refitted with seed-clustered standard errors because the five seeds
 recur across cells.
+
+The current-environment P=4 tranche is deliberately excluded from the regression
+while still entering the ratio heatmap. Two independent reasons, either
+sufficient on its own:
+
+  1. Provenance. The P=4 rows were trained in a later software environment than
+     the P in {8, 16} rows. The CD/CI ratio is a within-cell quantity, both arms
+     sharing one protocol, so it remains comparable across environments; an
+     inferential slope pooled over both would not be.
+  2. Training protocol. At P in {8, 16} the CD arm runs at batch 8 against CI's
+     128, giving CD 16.1x more gradient updates per epoch. At P=4 both arms run
+     at batch 128 with identical step counts. Pooling matched-budget and
+     16x-unmatched cells into one slope would confound the coupling effect with
+     the update-budget difference.
+
+The same protocol difference makes the P=4 cells the only matched-update-budget
+cells in this sweep, which is reported rather than hidden: the step-count table
+and the generated prose both break the ratio out per patch size instead of
+quoting a single figure across cells that do not share one.
 """
 
 import sys
@@ -90,10 +116,22 @@ _FIGURES_DIR = _ROOT / "paper" / "figures"
 _NAME_P4_CI = "results_boundary_p4_ci.csv"
 _NAME_BOUNDARY = "results_boundary.csv"
 
+# Internal provenance tag attached at load time. Rows from the original-environment
+# CSVs are "original"; rows from a merged P=4 tranche are "current". The tag drives
+# regression eligibility and the figure annotation, and is never written to disk.
+_PROV_COL = "_provenance"
+_PROV_ORIGINAL = "original"
+_PROV_CURRENT = "current"
+
 # Display order: P descending so P=16 (the null condition) sits at the top and
 # P=2 (the finest patch resolution) at the bottom.
 _PATCH_SIZES: list[int] = [16, 8, 4, 2]
 _GAMMAS: list[float] = [0.0, 0.3, 0.6, 0.9]
+
+# Generator constants for the boundary family, used only to derive the CD token
+# count quoted in the generated prose (N = floor((L - P) / S) + 1 at S = P / 2).
+_SEQ_LEN = 512
+_C_VARIATES = 21
 
 _REQUIRED_COLS: set[str] = {
     "dataset",
@@ -133,14 +171,22 @@ def resolve_csv(filename: str) -> Path:
 # -- Data loading --------------------------------------------------------------
 
 
-def load_boundary(path_a: Path, path_b: Path) -> pd.DataFrame:
-    """Load, validate, and merge both boundary CSVs.
+def load_boundary(path_a: Path, path_b: Path, current_paths: list[Path] | None = None) -> pd.DataFrame:
+    """Load, validate, and merge the boundary CSVs.
 
-    Rejects duplicate (patch_size, gamma, mode, seed) combinations and warns when
-    the seed count is not uniform across cells, which is the signature of a stale
-    or mixed-n input file.
+    path_a and path_b are the original-environment inputs. current_paths, when
+    given, are merged current-environment P=4 tranches; their rows supersede any
+    original-environment row sharing a (patch_size, gamma, mode, seed) key rather
+    than being pooled with it, since the two environments must never be averaged
+    within a cell. Every superseded row is reported with both values so the
+    substitution is visible rather than silent.
+
+    Duplicate keys within one provenance are still rejected outright, and a
+    non-uniform seed count across cells is warned about as the signature of a
+    stale or mixed-n input file.
     """
-    for path in (path_a, path_b):
+    current_paths = list(current_paths or [])
+    for path in (path_a, path_b, *current_paths):
         if not path.exists():
             raise FileNotFoundError(
                 f"Boundary CSV not found: {path}\n"
@@ -152,20 +198,62 @@ def load_boundary(path_a: Path, path_b: Path) -> pd.DataFrame:
     df_a = pd.read_csv(path_a)
     df_b = pd.read_csv(path_b)
 
-    for label, frame in (("Account A", df_a), ("Account B", df_b)):
+    for label, frame in (("Slice A", df_a), ("Slice B", df_b)):
         missing = _REQUIRED_COLS - set(frame.columns)
         if missing:
             raise ValueError(f"{label} CSV missing columns: {missing}")
 
-    df = pd.concat([df_a, df_b], ignore_index=True)
+    original = pd.concat([df_a, df_b], ignore_index=True)
+    original[_PROV_COL] = _PROV_ORIGINAL
+
+    current_frames = []
+    for path in current_paths:
+        frame = pd.read_csv(path)
+        missing = _REQUIRED_COLS - set(frame.columns)
+        if missing:
+            raise ValueError(f"{path.name} missing columns: {missing}")
+        frame[_PROV_COL] = _PROV_CURRENT
+        current_frames.append(frame)
 
     key_cols = ["patch_size", "gamma", "mode", "seed"]
+
+    if current_frames:
+        current = pd.concat(current_frames, ignore_index=True)
+        cur_dupes = current[current.duplicated(subset=key_cols, keep=False)]
+        if not cur_dupes.empty:
+            raise ValueError(
+                f"Duplicate (patch_size, gamma, mode, seed) rows across the "
+                f"current-environment inputs:\n{cur_dupes}"
+            )
+        superseded = original.merge(current[key_cols], on=key_cols, how="inner")
+        if not superseded.empty:
+            replacement = current.set_index(key_cols)["test_mse"]
+            lines = []
+            for _, row in superseded.iterrows():
+                key = tuple(row[c] for c in key_cols)
+                lines.append(
+                    f"  P={int(row.patch_size)} gamma={row.gamma} {row['mode']} seed={int(row.seed)}: "
+                    f"original {row.test_mse:.6f} -> current {float(replacement.loc[key]):.6f}"
+                )
+            print(
+                f"[INFO] {len(superseded)} original-environment row(s) superseded by the "
+                f"current-environment tranche (not pooled):\n" + "\n".join(lines)
+            )
+            merged_keys = current.set_index(key_cols).index
+            original = original[~original.set_index(key_cols).index.isin(merged_keys)].reset_index(drop=True)
+        df = pd.concat([original, current], ignore_index=True)
+    else:
+        df = original
+
     dupes = df[df.duplicated(subset=key_cols, keep=False)]
     if not dupes.empty:
         raise ValueError(f"Duplicate (patch_size, gamma, mode, seed) rows:\n{dupes}")
 
     df = df.sort_values(key_cols).reset_index(drop=True)
-    print(f"Loaded {len(df_a)} rows from Account A, {len(df_b)} rows from Account B.")
+    print(f"Loaded {len(df_a)} rows from Slice A, {len(df_b)} rows from Slice B.")
+    if current_frames:
+        n_current = sum(len(f) for f in current_frames)
+        print(f"Loaded {n_current} row(s) from {len(current_frames)} current-environment file(s).")
     print(f"Merged: {len(df)} rows total.")
     print(f"Patch sizes: {sorted(df['patch_size'].unique())}")
     print(f"Gammas:      {sorted(df['gamma'].unique())}")
@@ -187,10 +275,13 @@ def load_boundary(path_a: Path, path_b: Path) -> pd.DataFrame:
 def make_diff_frame(df: pd.DataFrame) -> pd.DataFrame:
     """One row per (patch_size, gamma, seed) with columns CI, CD, diff.
 
-    Only triples where both CI and CD exist are retained, which automatically
-    excludes P=2 and P=4 (CD infeasible). A triple with exactly one mode present
-    is reported and dropped, because a silent drop after a partial merge could
-    shrink the effective sample below what the caller expects.
+    Only triples where both CI and CD exist are retained, which excludes any
+    patch size where CD was never run (P=2 throughout, and P=4 unless a
+    current-environment tranche was supplied). A triple with exactly one mode
+    present is reported and dropped, because a silent drop after a partial merge
+    could shrink the effective sample below what the caller expects. The
+    provenance tag is carried through so downstream callers can scope the
+    regression without re-reading the inputs.
     """
     both = df[df["mode"].isin(["CI", "CD"])]
     pivot_full = both.pivot_table(
@@ -198,6 +289,9 @@ def make_diff_frame(df: pd.DataFrame) -> pd.DataFrame:
         columns="mode",
         values="test_mse",
     )
+    # A cell is single-provenance by construction: load_boundary supersedes rather
+    # than pools, so both arms of any (patch_size, gamma, seed) share one tag.
+    prov = both.groupby(["patch_size", "gamma", "seed"])[_PROV_COL].first()
 
     cd_patch_sizes = both.loc[both["mode"] == "CD", "patch_size"].unique()
     at_paired_p = pivot_full.index.get_level_values("patch_size").isin(cd_patch_sizes)
@@ -217,9 +311,10 @@ def make_diff_frame(df: pd.DataFrame) -> pd.DataFrame:
             f"from the merged data. Check the input files."
         )
 
-    pivot = pivot_full.dropna().reset_index()
+    pivot = pivot_full.dropna()
     if pivot.empty:
         raise ValueError("No paired (CI, CD) triples remain after the inner join.")
+    pivot = pivot.join(prov).reset_index()
     pivot["diff"] = pivot["CD"] - pivot["CI"]
     return pivot
 
@@ -233,6 +328,7 @@ def paired_differences(diff_df: pd.DataFrame) -> pd.DataFrame:
     """
     rows: list[dict[str, object]] = []
     for (patch_size, gamma), grp in diff_df.groupby(["patch_size", "gamma"]):
+        provenance = str(grp[_PROV_COL].iloc[0]) if _PROV_COL in grp.columns else _PROV_ORIGINAL
         diffs = grp["diff"].to_numpy()
         n = len(diffs)
         if n < 2:
@@ -256,9 +352,26 @@ def paired_differences(diff_df: pd.DataFrame) -> pd.DataFrame:
                 "signs": "".join("+" if x > 0 else ("-" if x < 0 else "0") for x in diffs),
                 "rel_pct": 100.0 * mean_d / ci_mean,
                 "ci_mean": ci_mean,
+                _PROV_COL: provenance,
             }
         )
     return pd.DataFrame(rows).sort_values(["patch_size", "gamma"]).reset_index(drop=True)
+
+
+def regression_eligible(diff_df: pd.DataFrame) -> pd.DataFrame:
+    """Subset of paired triples admissible to the gamma slope.
+
+    Restricted to original-environment rows. The current-environment P=4 tranche
+    is excluded for two independent reasons, either sufficient on its own: it was
+    trained under a later software environment, and its CD arm ran at the same
+    batch size as CI where the original-environment CD arm ran at batch 8. A
+    slope pooled across either difference would confound the coupling effect with
+    it. Those cells still enter the ratio heatmap, where the within-cell CD/CI
+    ratio is unaffected by both.
+    """
+    if _PROV_COL not in diff_df.columns:
+        return diff_df
+    return diff_df[diff_df[_PROV_COL] == _PROV_ORIGINAL].reset_index(drop=True)
 
 
 def diff_regression(diff_df: pd.DataFrame) -> dict[str, object]:
@@ -266,8 +379,8 @@ def diff_regression(diff_df: pd.DataFrame) -> dict[str, object]:
 
     Three fits, reported together:
       1. Main effects, the headline slope. gamma is numeric (equidistant on
-         {0.0, 0.3, 0.6, 0.9}); patch_size is categorical, since the two observed
-         levels {8, 16} carry no linearity assumption.
+         {0.0, 0.3, 0.6, 0.9}); patch_size is categorical, since the observed
+         levels carry no linearity assumption.
       2. The gamma-by-patch_size interaction, to confirm the slope is homogeneous
          across patch sizes rather than assuming it. A non-significant interaction
          justifies pooling into the single main-effects slope.
@@ -278,8 +391,8 @@ def diff_regression(diff_df: pd.DataFrame) -> dict[str, object]:
 
     A positive gamma coefficient means the CD-CI gap widens as coupling grows (CD
     relatively worse); a negative coefficient means it narrows. The direction is
-    reported explicitly in the prose. The fit is on the paired P in {8, 16} cells
-    only (2 patch sizes by 4 gamma by n_seeds).
+    reported explicitly in the prose. The fit is on the regression-eligible cells
+    only; see regression_eligible for what that excludes and why.
     """
     if diff_df["patch_size"].nunique() < 2:
         raise ValueError(
@@ -302,7 +415,9 @@ def diff_regression(diff_df: pd.DataFrame) -> dict[str, object]:
 
     gamma_ci = main.conf_int().loc["gamma"]
     cluster_ci = clustered.conf_int().loc["gamma"]
+    fitted_ps = ", ".join(f"P={int(p)}" for p in sorted(df_lm["patch_size"].unique()))
     return {
+        "scope_note": f"{fitted_ps}, original environment.",
         "coef_gamma": float(main.params["gamma"]),
         "ci_lo_gamma": float(gamma_ci.iloc[0]),
         "ci_hi_gamma": float(gamma_ci.iloc[1]),
@@ -321,7 +436,10 @@ def diff_regression(diff_df: pd.DataFrame) -> dict[str, object]:
 
 def ratio_grid(paired: pd.DataFrame) -> pd.DataFrame:
     """CD/CI ratio per cell from paired differences (ci_mean and mean_diff)."""
-    result = paired[["patch_size", "gamma", "ci_mean", "mean_diff"]].copy()
+    cols = ["patch_size", "gamma", "ci_mean", "mean_diff"]
+    if _PROV_COL in paired.columns:
+        cols.append(_PROV_COL)
+    result = paired[cols].copy()
     result["cd_mean"] = result["ci_mean"] + result["mean_diff"]
     result["ratio"] = result["cd_mean"] / result["ci_mean"]
     return result
@@ -338,6 +456,8 @@ def mode_batch_sizes(df: pd.DataFrame) -> dict[str, int | None]:
     out: dict[str, int | None] = {"CI": None, "CD": None}
     if "batch_size" not in df.columns:
         return out
+    # Where CD ran under more than one batch size across patch sizes, no single
+    # number describes it and None is returned so prose omits the claim entirely.
     cd_patch_sizes = df.loc[df["mode"] == "CD", "patch_size"].unique()
     paired = df[df["patch_size"].isin(cd_patch_sizes)]
     for mode in ("CI", "CD"):
@@ -367,12 +487,17 @@ def step_count_table(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def ci_only_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """Mean CI MSE at patch sizes where CD was not run (P in {2, 4}).
+    """Mean CI MSE at patch sizes where CD was not run.
 
-    These values appear in the paper tables but have no CD counterpart; printing
-    them here lets the script output verify every paper number.
+    The CD-absent patch sizes are read from the data rather than hardcoded, since
+    which patch sizes lack a CD arm depends on whether a current-environment P=4
+    tranche was supplied. These values appear in the paper tables but have no CD
+    counterpart; printing them here lets the script output verify every paper
+    number.
     """
-    ci_sub = df[(df["mode"] == "CI") & (df["patch_size"].isin([2, 4]))]
+    cd_patch_sizes = set(df.loc[df["mode"] == "CD", "patch_size"].unique())
+    ci_only_patch_sizes = sorted(set(df["patch_size"].unique()) - cd_patch_sizes)
+    ci_sub = df[(df["mode"] == "CI") & (df["patch_size"].isin(ci_only_patch_sizes))]
     if ci_sub.empty:
         return pd.DataFrame()
     return (
@@ -390,9 +515,10 @@ def ci_only_summary(df: pd.DataFrame) -> pd.DataFrame:
 def print_ci_only(ci_only: pd.DataFrame) -> None:
     """Print CI-only results at P=2 and P=4 for paper verification."""
     if ci_only.empty:
-        print("\n[INFO] No CI-only rows at P in {2, 4}.")
+        print("\n[INFO] No CI-only patch sizes: every patch size present carries a CD arm.")
         return
-    print("\n=== CI-ONLY SUMMARY (P in {2, 4}, CD infeasible) ===")
+    ps_list = ", ".join(f"P={int(p)}" for p in sorted(ci_only["patch_size"].unique()))
+    print(f"\n=== CI-ONLY SUMMARY ({ps_list}; CD not run) ===")
     print("These values appear in the paper; CD counterparts do not exist.")
     print(f"{'P':>4} {'gamma':>6}  {'CI mean':>10} {'CI std':>9}  n")
     print("-" * 44)
@@ -404,16 +530,23 @@ def print_paired(paired: pd.DataFrame, seeds: list[int]) -> None:
     """Print per-cell paired differences for P in {8, 16}."""
     seed_str = ", ".join(str(s) for s in seeds)
     n_seeds = len(seeds)
+    ps_list = ", ".join(f"P={int(p)}" for p in sorted(paired["patch_size"].unique()))
     print("\n=== PER-CELL PAIRED DIFFERENCES (CD - CI) ===")
-    print("P in {8, 16} only, the only patch sizes where CD was run.")
+    print(f"{ps_list}: every patch size where both modes ran.")
     print(f"Positive = CD worse. Signs = per-seed direction (seeds {seed_str}).")
-    header = f"{'P':>4} {'gamma':>6}  {'mean_diff':>10} {'rel_%':>8}  {'95%CI_lo':>10} {'95%CI_hi':>10}  signs"
+    show_prov = _PROV_COL in paired.columns and paired[_PROV_COL].nunique() > 1
+    prov_head = f" {'env':>8}" if show_prov else ""
+    header = (
+        f"{'P':>4} {'gamma':>6}  {'mean_diff':>10} {'rel_%':>8}  "
+        f"{'95%CI_lo':>10} {'95%CI_hi':>10}  signs{prov_head}"
+    )
     print(header)
-    print("-" * 72)
+    print("-" * (72 + len(prov_head)))
     for _, r in paired.iterrows():
+        prov_cell = f" {r[_PROV_COL]:>8}" if show_prov else ""
         print(
             f"{int(r.patch_size):>4} {r.gamma:>6.1f}  {r.mean_diff:>+10.6f} {r.rel_pct:>+8.4f}%  "
-            f"{r.ci_lo:>+10.6f} {r.ci_hi:>+10.6f}  {r.signs}"
+            f"{r.ci_lo:>+10.6f} {r.ci_hi:>+10.6f}  {r.signs}{prov_cell}"
         )
 
     max_diff = paired["mean_diff"].abs().max()
@@ -421,7 +554,7 @@ def print_paired(paired: pd.DataFrame, seeds: list[int]) -> None:
     n_zero = int(((paired["ci_lo"] < 0) & (paired["ci_hi"] > 0)).sum())
     n_cells = len(paired)
     n_cd_wins = int((paired["mean_diff"] < 0).sum())
-    print(f"\nCells (P in {{8, 16}}):            {n_cells}")
+    print(f"\nPaired cells:                    {n_cells}")
     print(f"Cells where CD wins (mean):      {n_cd_wins} / {n_cells}")
     print(f"Max |mean_diff|:                 {max_diff:.6f} MSE units")
     print(f"Max |relative effect|:           {max_pct:.4f}% of CI MSE")
@@ -436,16 +569,32 @@ def print_paired(paired: pd.DataFrame, seeds: list[int]) -> None:
 def print_step_table(steps: pd.DataFrame, batch: dict[str, int | None]) -> None:
     """Print the step-count ratio table."""
     print("\n=== STEP-COUNT TABLE (from CSV, not hardcoded) ===")
-    cd_bs = batch["CD"] if batch["CD"] is not None else "?"
-    ci_bs = batch["CI"] if batch["CI"] is not None else "?"
+    cd_bs = batch["CD"] if batch["CD"] is not None else "varies by patch size"
+    ci_bs = batch["CI"] if batch["CI"] is not None else "varies by patch size"
     print(f"CD batch_size={cd_bs}, CI batch_size={ci_bs}.")
     print("steps_per_epoch = dataset_size / batch_size, independent of patch_size.")
     cols = [c for c in ["patch_size", "CI", "CD", "cd_ci_ratio"] if c in steps.columns]
     print(steps[cols].to_string(index=False))
-    print(
-        "\nCD receives more gradient updates per epoch than CI at every patch size where CD was "
-        "run, so the null result cannot be attributed to CI holding a compute advantage."
-    )
+
+    if "cd_ci_ratio" in steps.columns:
+        ratios = steps.loc[steps["cd_ci_ratio"].notna(), ["patch_size", "cd_ci_ratio"]]
+        matched = ratios[np.isclose(ratios["cd_ci_ratio"], 1.0)]
+        unmatched = ratios[~np.isclose(ratios["cd_ci_ratio"], 1.0)]
+        if not unmatched.empty:
+            listed = ", ".join(
+                f"P={int(r.patch_size)} ({r.cd_ci_ratio:.1f}x)" for _, r in unmatched.iterrows()
+            )
+            print(
+                f"\nCD receives more gradient updates per epoch than CI at {listed}, so at those "
+                f"patch sizes the null cannot be attributed to CI holding a compute advantage."
+            )
+        if not matched.empty:
+            listed = ", ".join(f"P={int(r.patch_size)}" for _, r in matched.iterrows())
+            print(
+                f"At {listed} both modes run the same batch size and therefore the same number of "
+                f"updates per epoch, so those cells carry no step-count asymmetry in either "
+                f"direction and are the sweep's only matched-update-budget cells."
+            )
 
 
 def print_lm(lm: dict[str, object]) -> None:
@@ -454,7 +603,7 @@ def print_lm(lm: dict[str, object]) -> None:
     direction = "positive" if lm["coef_gamma"] > 0 else "negative"
     widens = "widens" if lm["coef_gamma"] > 0 else "narrows"
     print("\n=== REGRESSION ON PAIRED DIFFERENCES: diff ~ gamma + patch_size_cat ===")
-    print(f"Fitted on P in {{8, 16}} only ({lm['n_rows']} rows). P=2, P=4 structurally absent.")
+    print(f"Fitted on the regression-eligible cells only ({lm['n_rows']} rows): {lm['scope_note']}")
     print(f"gamma coefficient:    {lm['coef_gamma']:+.6f}  ({pct_per_unit:+.4f}% of mean CI MSE / unit gamma)")
     print(f"Direction:            {direction}, CD gap {widens} as gamma increases")
     print(f"95% CI (gamma):       [{lm['ci_lo_gamma']:+.6f}, {lm['ci_hi_gamma']:+.6f}]")
@@ -473,18 +622,42 @@ def print_lm(lm: dict[str, object]) -> None:
     print(lm["model"].summary().tables[1])
 
 
+def _cd_token_phrase(patch_size: int) -> str:
+    """LaTeX phrase naming the CD token count at one patch size.
+
+    N = floor((L - P) / S) + 1 at S = P / 2, so the count is derived rather than
+    quoted; a hardcoded figure would silently misdescribe any patch size but the
+    one it was written for.
+    """
+    stride = max(patch_size // 2, 1)
+    n_patches = (_SEQ_LEN - patch_size) // stride + 1
+    tokens = f"{_C_VARIATES * n_patches:,}".replace(",", "{,}")
+    return f"${_C_VARIATES} \\times {n_patches} = {tokens}$ tokens at $P = {patch_size}$"
+
+
 def print_latex_prose(
     paired: pd.DataFrame,
     lm: dict[str, object],
     steps: pd.DataFrame,
     batch: dict[str, int | None],
+    regression_paired: pd.DataFrame | None = None,
 ) -> None:
-    """Print a ready-to-paste LaTeX paragraph for the boundary experiment."""
+    """Print a ready-to-paste LaTeX paragraph for the boundary experiment.
+
+    paired covers every cell where both modes ran and drives the descriptive
+    claims; regression_paired, when the two differ, covers the narrower set the
+    slope was fitted on. Keeping them separate stops the paragraph from quoting a
+    slope over cells it was not fitted on.
+    """
     max_diff = paired["mean_diff"].abs().max()
     max_pct = paired["rel_pct"].abs().max()
     n_cells = len(paired)
     n_zero = int(((paired["ci_lo"] < 0) & (paired["ci_hi"] > 0)).sum())
     n_cd_wins = int((paired["mean_diff"] < 0).sum())
+    reg_paired = paired if regression_paired is None else regression_paired
+    paired_ps = sorted(int(p) for p in paired["patch_size"].unique())
+    reg_ps = sorted(int(p) for p in reg_paired["patch_size"].unique())
+    cd_absent_ps = sorted(set(_PATCH_SIZES) - set(paired_ps))
 
     if n_zero == n_cells:
         zero_clause = f"all {n_cells} of the 95\\% confidence intervals include zero"
@@ -499,12 +672,31 @@ def print_latex_prose(
     else:
         wins_clause = f"CD reaches a lower mean MSE than CI in {n_cd_wins} of the {n_cells} cells"
 
-    step_ratio = "N/A"
+    # Reported per patch size rather than as one range: a single figure spanning a
+    # matched cell (1.0x) and an unmatched one (16.1x) would misdescribe both.
+    step_clause = ""
     if "cd_ci_ratio" in steps.columns:
-        paired_rows = steps[steps["cd_ci_ratio"].notna()]
-        if not paired_rows.empty:
-            ratios = sorted(paired_rows["cd_ci_ratio"].unique())
-            step_ratio = f"{ratios[0]:.1f}" if len(ratios) == 1 else f"{ratios[0]:.1f}--{ratios[-1]:.1f}"
+        rows = steps[steps["cd_ci_ratio"].notna()]
+        unmatched = rows[~np.isclose(rows["cd_ci_ratio"], 1.0)]
+        matched = rows[np.isclose(rows["cd_ci_ratio"], 1.0)]
+        parts = []
+        if not unmatched.empty:
+            listed = " and ".join(
+                f"$\\approx{r.cd_ci_ratio:.1f}\\times$ at $P = {int(r.patch_size)}$"
+                for _, r in unmatched.iterrows()
+            )
+            parts.append(
+                f"CD received more gradient updates per epoch than CI ({listed}), so at those "
+                f"patch sizes the null cannot be attributed to a CI compute advantage"
+            )
+        if not matched.empty:
+            listed = " and ".join(f"$P = {int(r.patch_size)}$" for _, r in matched.iterrows())
+            parts.append(
+                f"at {listed} both modes ran the same batch size and therefore the same number of "
+                f"updates per epoch, so that cell carries no step-count asymmetry in either direction"
+            )
+        if parts:
+            step_clause = "; ".join(parts) + "."
 
     direction_phrase = (
         "widening slightly as coupling strength grows"
@@ -512,30 +704,47 @@ def print_latex_prose(
         else "narrowing slightly as coupling strength grows"
     )
 
-    if batch["CD"] is not None and batch["CI"] is not None:
-        batch_phrase = f"batch sizes {batch['CD']} versus {batch['CI']}, "
+    paired_ps_tex = ", ".join(str(p) for p in paired_ps)
+    reg_ps_tex = ", ".join(str(p) for p in reg_ps)
+
+    if cd_absent_ps:
+        # Token counts are derived per patch size rather than quoted from one cell:
+        # N = floor((L - P) / S) + 1 at L = 512, S = P / 2, so C * N differs at each P.
+        listed = " and ".join(_cd_token_phrase(p) for p in cd_absent_ps)
+        absent_clause = (
+            f"CD is computationally infeasible at the remaining patch sizes on the T4, where "
+            f"sequence lengths of {listed} exhaust available memory, so those cells are "
+            f"structurally absent from the paired analysis and their interaction with $\\gamma$ "
+            f"is not estimable. "
+        )
     else:
-        batch_phrase = ""
+        absent_clause = ""
+
+    if reg_ps != paired_ps:
+        scope_clause = (
+            f" The slope is fitted on $P \\in \\{{{reg_ps_tex}\\}}$ only: the remaining paired cells "
+            f"were trained in a later software environment and, in that environment, with CD and CI "
+            f"at a common batch size, so pooling them into one slope would confound the coupling "
+            f"effect with both differences. Their within-cell CD/CI ratios, which neither difference "
+            f"affects, are reported in the accompanying table and figure."
+        )
+    else:
+        scope_clause = ""
 
     print("\n=== PAPER PROSE (leader-follower boundary experiment paragraph) ===")
     print(
         f"To test whether channel-dependent attention can exploit cross-variate coupling once it is "
         f"concentrated within individual patches, we sweep patch size $P \\in \\{{2, 4, 8, 16\\}}$ against "
         f"coupling strength $\\gamma \\in \\{{0.0, 0.3, 0.6, 0.9\\}}$ on the leader-follower VAR(1) process "
-        f"at $C = 21$, $\\rho = 0.5$. CD is computationally infeasible at $P \\leq 4$ on the T4, where "
-        f"sequence lengths of $21 \\times 255 = 5355$ and $21 \\times 511 = 10{{,}}731$ tokens exhaust "
-        f"available memory, so those cells are structurally absent from the paired analysis and the "
-        f"$P \\in \\{{2, 4\\}}$ by $\\gamma$ interaction is not estimable. Across the {n_cells} cells where "
-        f"both modes run ($P \\in \\{{8, 16\\}}$, all four $\\gamma$), the mean CD$-$CI difference stays "
+        f"at $C = 21$, $\\rho = 0.5$. {absent_clause}Across the {n_cells} cells where "
+        f"both modes run ($P \\in \\{{{paired_ps_tex}\\}}$, all four $\\gamma$), the mean CD$-$CI difference stays "
         f"within $\\pm{max_diff:.4f}$ MSE (at most ${max_pct:.2f}\\%$ of the CI mean), {zero_clause}, and "
         f"{wins_clause}. Regressing the paired difference on $\\gamma$ gives a slope of "
         f"${lm['coef_gamma']:+.4f}$ MSE per unit $\\gamma$ "
         f"(95\\% CI $[{lm['ci_lo_gamma']:+.4f}, {lm['ci_hi_gamma']:+.4f}]$, $p = {lm['pval_gamma']:.2f}$), "
-        f"with the gap {direction_phrase}; the slope is homogeneous across the two patch sizes "
+        f"with the gap {direction_phrase}; the slope is homogeneous across patch sizes "
         f"(interaction $p = {lm['interaction_p']:.2f}$) and survives seed-clustered standard errors "
-        f"($p = {lm['cluster_pval_gamma']:.2f}$). CD received about ${step_ratio}\\times$ more gradient "
-        f"updates per epoch than CI ({batch_phrase}read from the training logs), so the null cannot be "
-        f"attributed to a CI compute advantage."
+        f"($p = {lm['cluster_pval_gamma']:.2f}$).{scope_clause} {step_clause}"
     )
 
 
@@ -545,9 +754,11 @@ def print_latex_prose(
 def plot_heatmap(ratios: pd.DataFrame, out_path: Path) -> None:
     """Render the partial (P, gamma) CD/CI ratio heatmap.
 
-    Only cells in ratios (P in {8, 16}) carry colour; P=2 and P=4 are grey N/A.
-    The colour range is data-driven: the max deviation from 1.0 scaled by 1.1,
-    with a floor of 0.002.
+    Only cells present in ratios carry colour; the rest are grey N/A. The colour
+    range is data-driven: the max deviation from 1.0 scaled by 1.1, with a floor
+    of 0.002. When the cells span more than one provenance a footnote records
+    which patch sizes came from the current environment, so the figure does not
+    present two training environments as one without saying so.
     """
     lookup: dict[tuple[int, float], float] = {
         (int(r.patch_size), float(r.gamma)): float(r.ratio) for _, r in ratios.iterrows()
@@ -595,6 +806,23 @@ def plot_heatmap(ratios: pd.DataFrame, out_path: Path) -> None:
         pad=8,
     )
 
+    if _PROV_COL in ratios.columns and ratios[_PROV_COL].nunique() > 1:
+        current_ps = sorted(
+            int(p) for p in ratios.loc[ratios[_PROV_COL] == _PROV_CURRENT, "patch_size"].unique()
+        )
+        listed = ", ".join(f"P={p}" for p in current_ps)
+        fig.text(
+            0.5,
+            -0.02,
+            f"{listed} trained in a later software environment, CD at CI's batch size; "
+            f"the remaining rows are the original environment. Ratios are within-cell "
+            f"and unaffected by both differences.",
+            ha="center",
+            va="top",
+            fontsize=7.5,
+            color="#444444",
+        )
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
@@ -606,19 +834,33 @@ def plot_heatmap(ratios: pd.DataFrame, out_path: Path) -> None:
 
 def main() -> None:
     """Run the full boundary analysis and write the heatmap."""
-    if len(sys.argv) == 3:
+    current_paths: list[Path] = []
+    if len(sys.argv) >= 3:
         path_a = Path(sys.argv[1])
         path_b = Path(sys.argv[2])
+        current_paths = [Path(a) for a in sys.argv[3:]]
     elif len(sys.argv) == 1:
         path_a = resolve_csv(_NAME_P4_CI)
         path_b = resolve_csv(_NAME_BOUNDARY)
     else:
-        raise SystemExit("Usage: python analyze_boundary.py [path/to/results_boundary_p4_ci.csv path/to/results_boundary.csv]")
+        raise SystemExit(
+            "Usage: python analyze_boundary.py "
+            "[p4_ci.csv boundary.csv [p4_gamma_complete.csv ...]]"
+        )
 
-    df = load_boundary(path_a, path_b)
+    df = load_boundary(path_a, path_b, current_paths)
     diff_df = make_diff_frame(df)
     paired = paired_differences(diff_df)
-    lm = diff_regression(diff_df)
+
+    reg_diff = regression_eligible(diff_df)
+    if reg_diff.empty:
+        raise ValueError(
+            "No regression-eligible paired cells remain; the gamma slope cannot be "
+            "fitted. See regression_eligible for the scoping rule."
+        )
+    lm = diff_regression(reg_diff)
+    reg_paired = paired_differences(reg_diff)
+
     ratios = ratio_grid(paired)
     steps = step_count_table(df)
     ci_only = ci_only_summary(df)
@@ -630,7 +872,7 @@ def main() -> None:
     print_paired(paired, paired_seeds)
     print_step_table(steps, batch)
     print_lm(lm)
-    print_latex_prose(paired, lm, steps, batch)
+    print_latex_prose(paired, lm, steps, batch, reg_paired)
     plot_heatmap(ratios, _FIGURES_DIR / "boundary_heatmap.png")
 
 

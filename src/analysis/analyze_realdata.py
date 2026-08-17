@@ -8,10 +8,13 @@ results/results_etth1.csv             Required. ETTh1 CI vs CD per-seed,
     Required columns: mode, pred_len, seed, test_mse, best_epoch.
     Optional budget columns: steps_per_epoch, total_steps_to_best.
 
-results/results_ecl.csv        Optional. ECL CI per-seed results.
+results/results_ecl.csv        Optional. ECL per-seed results, CI and CD.
     Required columns: mode, pred_len, seed, test_mse.
-    NOTE: copy this file into results/ before running. If absent, the ECL
-    panel is omitted and the figure is incomplete for submission.
+    If an arch_version column is present, every row must carry the value 2;
+    the script raises otherwise. Modes, horizons, and seeds are taken from the
+    file rather than assumed, and the summary and figure adapt to what is
+    present. If absent, the ECL panel is omitted and the figure is incomplete
+    for submission.
 
 results/realdata_corr_summary.csv         Optional. Pre-computed per-dataset
     lag-0 and lag-structure summary (output of measure_lag_structure.py).
@@ -23,17 +26,19 @@ results/realdata_lag_summary.csv          Optional. Mean abs cross-correlation
 
 Writes
 ------
-Results/figures/real_data.png
+paper/figures/real_data.png
     Left panel: ETTh1 CI vs CD bar chart across horizons {96, 192, 336, 720}.
-    Right panel (if ECL available): ECL CI-only panel across all four horizons.
-    The ECL panel is explicitly labelled CI-only to avoid implying a two-mode
-    comparison. The figure title does not reference "CI vs CD" for ECL.
+    Right panel (if ECL available): ECL bar chart over the modes and horizons
+    present in the file. Error bars are drawn only where a group has two or
+    more seeds; single-seed groups are plotted without error bars and the
+    panel title states the seeds used.
 
 Console
 -------
 ETTh1 ratio table; per-horizon paired CD-CI differences with 95% t-CIs;
-budget-match verification table (CD/CI steps_per_epoch ratio equals 1.0); ECL summary; dataset
-correlation characterisation (descriptive, with explicit heuristic disclaimer).
+budget-match verification table (CD/CI steps_per_epoch ratio equals 1.0);
+ECL summary; dataset correlation characterisation (descriptive, with explicit
+heuristic disclaimer).
 
 Statistical notes
 -----------------
@@ -47,10 +52,14 @@ CD never attains a significant advantage; CI is significantly better at H=96 and
 favours CI. The step-count table below verifies the budget match (CD/CI steps_per_epoch ratio equals 1.0) rather than
 documenting an asymmetry.
 
+ECL results are descriptive. Confidence intervals and significance tests are
+reported only for groups with at least two seeds; a single-seed group is
+reported as point estimates with the seed identified.
+
 Usage
 -----
-python analyze_realdata.py [path/to/results_etth1.csv]
-Script must live in time-series-forecasting/; all paths are relative to it.
+uv run src/analysis/analyze_realdata.py [path/to/results_etth1.csv]
+Run from the repository root; all paths resolve relative to it.
 """
 
 import sys
@@ -82,11 +91,11 @@ _ECL_PATH   = _RESULTS_DIR / "results_ecl.csv"
 _CORR_PATH  = _RESULTS_DIR / "realdata_corr_summary.csv"
 _LAG_PATH   = _RESULTS_DIR / "realdata_lag_summary.csv"
 
-_CI_COLOR  = "#0072b2"   # blue  (Wong 2011 colourblind-safe palette)
-_CD_COLOR  = "#d55e00"   # vermillion
-_ECL_COLOR = "#56b4e9"   # sky blue (single-mode panel)
+_CI_COLOR = "#0072b2"   # blue  (Wong 2011 colourblind-safe palette)
+_CD_COLOR = "#d55e00"   # vermillion
 
 _BUDGET_COLS: frozenset[str] = frozenset({"steps_per_epoch", "total_steps_to_best"})
+_ECL_ARCH_VERSION = 2   # architecture revision matching the committed models.py
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -112,13 +121,27 @@ def load_etth1(path: Path) -> pd.DataFrame:
 
 
 def load_ecl(path: Path) -> pd.DataFrame | None:
+    """Load ECL results, validating modes, uniqueness, and architecture version.
+
+    Both CI and CD rows are accepted. When an arch_version column is present,
+    every row must equal _ECL_ARCH_VERSION so that results from the retired
+    pre-correction architecture cannot enter the analysis unnoticed.
+    """
     df = _load_optional(path, {"mode", "pred_len", "seed", "test_mse"}, "ECL results")
     if df is None:
         return None
-    cd_rows = df[df["mode"] == "CD"]
-    if not cd_rows.empty:
-        print(f"[WARN] ECL CSV contains {len(cd_rows)} CD rows; these are excluded "
-              f"(CD is computationally infeasible at C=321 on T4).")
+    bad_modes = set(df["mode"]) - {"CI", "CD"}
+    if bad_modes:
+        raise ValueError(f"ECL results contain unexpected modes: {sorted(bad_modes)}")
+    dup = df.duplicated(subset=["mode", "pred_len", "seed"])
+    if dup.any():
+        raise ValueError(f"ECL results contain {int(dup.sum())} duplicate "
+                         f"(mode, pred_len, seed) rows.")
+    if "arch_version" in df.columns:
+        versions = set(df["arch_version"].unique().tolist())
+        if versions != {_ECL_ARCH_VERSION}:
+            raise ValueError(f"ECL arch_version must be {{{_ECL_ARCH_VERSION}}}; "
+                             f"found {sorted(versions)}.")
     return df
 
 
@@ -137,36 +160,39 @@ def load_lag_summary(path: Path) -> pd.DataFrame | None:
 # ── Aggregation ───────────────────────────────────────────────────────────────
 
 def aggregate_by_mode_horizon(df: pd.DataFrame) -> pd.DataFrame:
-    """Mean and std of test_mse over seeds per (mode, pred_len)."""
-    return (
-        df.groupby(["mode", "pred_len"])["test_mse"]
-        .agg(mse_mean="mean", mse_std="std")
-        .reset_index()
-    )
+    """Mean, std, and seed count of test_mse per (mode, pred_len).
 
-
-def aggregate_ecl(df: pd.DataFrame) -> pd.DataFrame:
-    """Mean and std of CI test_mse per pred_len for ECL.
-
-    CD rows are excluded; any that exist trigger a warning in load_ecl.
+    std uses ddof=1 and is therefore NaN for single-seed groups; downstream
+    consumers treat NaN as "no dispersion estimate" rather than zero.
     """
     return (
-        df[df["mode"] == "CI"]
-        .groupby("pred_len")["test_mse"]
-        .agg(mse_mean="mean", mse_std="std")
+        df.groupby(["mode", "pred_len"])["test_mse"]
+        .agg(mse_mean="mean", mse_std="std", n="count")
         .reset_index()
-        .assign(mode="CI")
     )
+
+
+def mode_comparison_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-horizon CI vs CD means with CD/CI ratio and CD-CI difference.
+
+    Horizons present in only one mode are dropped from the comparison; they
+    still appear in the per-mode aggregate and the figure.
+    """
+    agg = aggregate_by_mode_horizon(df)
+    ci = agg[agg["mode"] == "CI"][["pred_len", "mse_mean", "n"]].rename(
+        columns={"mse_mean": "ci", "n": "n_ci"})
+    cd = agg[agg["mode"] == "CD"][["pred_len", "mse_mean", "n"]].rename(
+        columns={"mse_mean": "cd", "n": "n_cd"})
+    merged = ci.merge(cd, on="pred_len")
+    merged["ratio"]    = merged["cd"] / merged["ci"]
+    merged["diff"]     = merged["cd"] - merged["ci"]
+    merged["rel_pct"]  = 100.0 * merged["diff"] / merged["ci"]
+    return merged.sort_values("pred_len").reset_index(drop=True)
 
 
 def etth1_ratio_table(df: pd.DataFrame) -> pd.DataFrame:
     """CD/CI MSE ratio per horizon."""
-    agg = aggregate_by_mode_horizon(df)
-    ci = agg[agg["mode"] == "CI"][["pred_len", "mse_mean"]].rename(columns={"mse_mean": "ci"})
-    cd = agg[agg["mode"] == "CD"][["pred_len", "mse_mean"]].rename(columns={"mse_mean": "cd"})
-    merged = ci.merge(cd, on="pred_len")
-    merged["ratio"] = merged["cd"] / merged["ci"]
-    return merged.sort_values("pred_len").reset_index(drop=True)
+    return mode_comparison_table(df)[["pred_len", "ci", "cd", "ratio"]]
 
 
 def etth1_paired_diff(df: pd.DataFrame) -> pd.DataFrame:
@@ -301,15 +327,38 @@ def print_etth1_summary(
               f"steps_per_epoch ratio is {ratio_msg}.")
 
 
-def print_ecl_summary(ecl_agg: pd.DataFrame) -> None:
-    """Print ECL CI-only MSE across all four horizons."""
-    print("\n=== ECL: CI MSE (mean over seeds {42, 123, 456}) ===")
-    print("CD excluded: computationally infeasible (C*N=3531 tokens, ~5000 s/epoch on T4).")
-    print(f"{'H':>5}  {'CI mean':>9}  {'CI std':>8}  {'CV%':>6}")
-    print("-" * 35)
-    for _, r in ecl_agg.iterrows():
-        cv = 100.0 * r.mse_std / r.mse_mean
-        print(f"{int(r.pred_len):>5}  {r.mse_mean:>9.6f}  {r.mse_std:>8.6f}  {cv:>6.3f}%")
+def print_ecl_summary(ecl: pd.DataFrame) -> None:
+    """Print ECL per-mode MSE and, where both modes exist, the CD-CI comparison.
+
+    Inferential statistics require at least two seeds per group; below that,
+    values are reported as descriptive point estimates with the seeds named.
+    """
+    seeds = sorted(int(s) for s in ecl["seed"].unique())
+    modes = sorted(ecl["mode"].unique())
+    seed_str = ", ".join(str(s) for s in seeds)
+    print(f"\n=== ECL: test MSE by mode and horizon (seeds {{{seed_str}}}) ===")
+
+    agg = aggregate_by_mode_horizon(ecl)
+    print(f"{'mode':>5}  {'H':>5}  {'mean':>9}  {'std':>8}  {'n':>3}")
+    print("-" * 38)
+    for _, r in agg.sort_values(["pred_len", "mode"]).iterrows():
+        std_str = f"{r.mse_std:>8.6f}" if np.isfinite(r.mse_std) else f"{'--':>8}"
+        print(f"{r['mode']:>5}  {int(r.pred_len):>5}  {r.mse_mean:>9.6f}  {std_str}  {int(r.n):>3}")
+
+    if {"CI", "CD"}.issubset(modes):
+        comp = mode_comparison_table(ecl)
+        print("\n--- CD vs CI (per horizon) ---")
+        print(f"{'H':>5}  {'CI':>9}  {'CD':>9}  {'CD/CI':>7}  {'CD-CI':>9}  {'rel_%':>7}")
+        print("-" * 56)
+        for _, r in comp.iterrows():
+            print(f"{int(r.pred_len):>5}  {r.ci:>9.6f}  {r.cd:>9.6f}  "
+                  f"{r.ratio:>7.4f}  {r['diff']:>+9.6f}  {r.rel_pct:>+7.2f}%")
+        min_n = int(min(comp["n_ci"].min(), comp["n_cd"].min()))
+        if min_n < 2:
+            print(f"Descriptive only: {min_n} seed per group, so no confidence "
+                  f"intervals or significance tests are reported.")
+    else:
+        print(f"Single mode present ({modes[0]}); no CD-CI comparison available.")
 
 
 def print_corr_summary(corr: pd.DataFrame, lag: pd.DataFrame | None) -> None:
@@ -344,15 +393,25 @@ def print_corr_summary(corr: pd.DataFrame, lag: pd.DataFrame | None) -> None:
 
 # ── Figure ────────────────────────────────────────────────────────────────────
 
+def _bar_yerr(rows: pd.DataFrame, pred_lens: list[int]) -> list[float] | None:
+    """Error-bar values for one mode, or None when no group has a std estimate.
+
+    A NaN std (single-seed group) is passed through as NaN, which matplotlib
+    renders as an absent error bar; a zero would instead misrepresent the
+    group as having zero measured dispersion.
+    """
+    vals = [float(rows.loc[p, "mse_std"]) if p in rows.index else np.nan for p in pred_lens]
+    return None if all(np.isnan(v) for v in vals) else vals
+
+
 def _draw_panel(
     ax: plt.Axes,
     agg: pd.DataFrame,
     pred_lens: list[int],
     title: str,
     ylabel: bool,
-    show_cd: bool,
 ) -> None:
-    """Grouped bar chart for one dataset.
+    """Grouped bar chart for one dataset over the modes present in agg.
 
     Correlation statistics are NOT overlaid on the bars: they are dataset-level
     descriptors while performance is horizon- and mode-specific. Combining them
@@ -362,26 +421,27 @@ def _draw_panel(
     x = np.arange(len(pred_lens))
 
     ci_rows = agg[agg["mode"] == "CI"].set_index("pred_len")
+    cd_rows = agg[agg["mode"] == "CD"].set_index("pred_len")
+    show_cd = not cd_rows.empty
 
     def _vals(rows: pd.DataFrame, col: str) -> list[float]:
         return [float(rows.loc[p, col]) if p in rows.index else np.nan for p in pred_lens]
 
     if show_cd:
-        cd_rows = agg[agg["mode"] == "CD"].set_index("pred_len")
         ax.bar(
             x - bar_width / 2, _vals(ci_rows, "mse_mean"), bar_width,
-            yerr=_vals(ci_rows, "mse_std"), capsize=3, color=_CI_COLOR,
+            yerr=_bar_yerr(ci_rows, pred_lens), capsize=3, color=_CI_COLOR,
             alpha=0.88, label="CI", error_kw={"linewidth": 0.8},
         )
         ax.bar(
             x + bar_width / 2, _vals(cd_rows, "mse_mean"), bar_width,
-            yerr=_vals(cd_rows, "mse_std"), capsize=3, color=_CD_COLOR,
+            yerr=_bar_yerr(cd_rows, pred_lens), capsize=3, color=_CD_COLOR,
             alpha=0.88, label="CD", error_kw={"linewidth": 0.8},
         )
     else:
         ax.bar(
             x, _vals(ci_rows, "mse_mean"), bar_width * 1.4,
-            yerr=_vals(ci_rows, "mse_std"), capsize=3, color=_ECL_COLOR,
+            yerr=_bar_yerr(ci_rows, pred_lens), capsize=3, color=_CI_COLOR,
             alpha=0.88, label="CI", error_kw={"linewidth": 0.8},
         )
 
@@ -402,12 +462,15 @@ def _draw_panel(
 def plot_real_data(
     etth1_agg: pd.DataFrame,
     ecl_agg: pd.DataFrame | None,
+    ecl_seeds: list[int] | None,
     out_path: Path,
 ) -> None:
     """Generate the real-data bar chart figure.
 
-    Takes pre-aggregated DataFrames (aggregation is the caller's responsibility).
-    Left panel: ETTh1 CI vs CD. Right panel (if ECL): ECL CI-only.
+    Takes pre-aggregated DataFrames (aggregation is the caller's
+    responsibility). Left panel: ETTh1 CI vs CD. Right panel (if ECL): the
+    modes and horizons present in the ECL file, with the seeds named in the
+    title when fewer than two are available.
     """
     has_ecl = ecl_agg is not None
     ncols   = 2 if has_ecl else 1
@@ -419,16 +482,21 @@ def plot_real_data(
     _draw_panel(
         axes[0], etth1_agg, [96, 192, 336, 720],
         "ETTh1 (C=7): CI vs CD",
-        ylabel=True, show_cd=True,
+        ylabel=True,
     )
     if has_ecl:
+        ecl_pred_lens = sorted(int(p) for p in ecl_agg["pred_len"].unique())
+        ecl_modes     = [m for m in ("CI", "CD") if m in set(ecl_agg["mode"])]
+        mode_label    = " vs ".join(ecl_modes) if len(ecl_modes) > 1 else f"{ecl_modes[0]} only"
+        seed_note     = ""
+        if ecl_seeds is not None and len(ecl_seeds) < 2:
+            seed_note = f"\n(seed {ecl_seeds[0]})"
         _draw_panel(
-            axes[1], ecl_agg, [96, 192, 336, 720],
-            "ECL (C=321): CI only\n(CD computationally infeasible)",
-            ylabel=False, show_cd=False,
+            axes[1], ecl_agg, ecl_pred_lens,
+            f"ECL (C=321): {mode_label}{seed_note}",
+            ylabel=False,
         )
 
-    # fig.suptitle("PatchTST on ETTh1 and ECL", y=1.02, fontsize=11)
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, bbox_inches="tight")
@@ -451,15 +519,16 @@ def main() -> None:
     ratio     = etth1_ratio_table(etth1)
     paired    = etth1_paired_diff(etth1)
     budget    = etth1_budget_table(etth1)
-    ecl_agg   = aggregate_ecl(ecl) if ecl is not None else None
+    ecl_agg   = aggregate_by_mode_horizon(ecl) if ecl is not None else None
+    ecl_seeds = sorted(int(s) for s in ecl["seed"].unique()) if ecl is not None else None
 
     print_etth1_summary(ratio, paired, budget, etth1_seeds)
-    if ecl_agg is not None:
-        print_ecl_summary(ecl_agg)
+    if ecl is not None:
+        print_ecl_summary(ecl)
     if corr is not None:
         print_corr_summary(corr, lag)
 
-    plot_real_data(etth1_agg, ecl_agg, _FIGURES_DIR / "real_data.png")
+    plot_real_data(etth1_agg, ecl_agg, ecl_seeds, _FIGURES_DIR / "real_data.png")
 
 
 if __name__ == "__main__":

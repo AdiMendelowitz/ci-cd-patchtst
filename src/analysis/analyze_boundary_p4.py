@@ -4,8 +4,8 @@ The paired contrast, the cross-environment CI reproducibility measurement,
 the paste-ready effect-size row (tab:equiv schema) plus a tab:boundary note,
 and a frozen oracle are wired to the executed CSV(s). The script exits 0
 only when every number reproduces the oracle recomputed from the file(s) of
-record; any drift, or any gamma present in the data with no oracle entry
-yet, exits 1.
+record; any drift in _ORACLE_PAIRED exits 1; a gamma absent from _ORACLE_REPRO
+is a cross-environment measurement with no old-env reference and is skipped, not failed.
 
 Reads
 -----
@@ -33,8 +33,8 @@ Paths
 Candidate directories resolve against the repository root (first parent holding a
 results/ directory), so the script runs from any CWD. The boundary P=4 folder is
 discovered under results/Revision/ preferring the correctly-spelled
-train_boundary_p4, falling back to a train_bound*_p4 glob (covers the known local
-"train_boundry_p4" typo; that typo must never reach a
+train_boundary_p4_temp, falling back to a train_bound*_p4 glob (covers the known local
+"train_boundary_p4" typo; that typo must never reach a
 committed path). Explicit paths override discovery entirely:
 
     python analyze_boundary_p4.py [new_csv ...] [--ci-ref committed_p4_ci.csv]
@@ -45,6 +45,7 @@ committed path). Explicit paths override discovery entirely:
     python analyze_boundary_p4.py results_boundary_p4_complete.csv \\
         results_boundary_p4_gamma0_complete.csv \\
         results_boundary_p4_gamma06_complete.csv --ci-ref results_boundary_p4_ci.csv
+    Paths above are relative to the current working directory; run from the repository root or pass full paths.
 
 Statistical design
 ------------------
@@ -100,30 +101,26 @@ SCHEMA = ["dataset", "C", "rho", "gamma", "patch_size", "mode", "seed",
 # quantity is printed into main.tex: MSE means / ratio / CD-CI / CI bounds at
 # 4 dp, rel_pct at 2 dp, sign-test p at 3 dp. gamma -> targets.
 _ORACLE_PAIRED = {
+    # gamma-0.3 tranche, verified against results_boundary_p4_gamma03_complete.csv
+    # (5/5 CD + 5/5 CI seeds, merged from slices s1/s2/s3 with no seed/mode
+    # overlap).
+    0.3: {"ci": 0.9787, "cd": 0.9791, "ratio": 1.0004,
+          "cd_minus_ci": 0.0004, "ci_lo": -0.0005, "ci_hi": 0.0013,
+          "rel_pct": 0.04, "within_threshold": True,
+          "k_pos": 4, "n_signs": 5, "sign_p": 0.188, "n": 5},
     0.9: {"ci": 0.9749, "cd": 0.9753, "ratio": 1.0004,
           "cd_minus_ci": 0.0004, "ci_lo": -0.0010, "ci_hi": 0.0018,
           "rel_pct": 0.04, "within_threshold": True,
           "k_pos": 3, "n_signs": 5, "sign_p": 0.500, "n": 5},
-    # gamma-0 tranche, verified against results_boundary_p4_gamma0_complete.csv
-    # (5/5 CD + 5/5 CI seeds, merged from slices a1/a2/a3 with no seed/mode
-    # overlap). CD/CI ratio 0.9997 matches the expected internal-control
-    # result at gamma=0.
     0.0: {"ci": 0.9836, "cd": 0.9833, "ratio": 0.9997,
           "cd_minus_ci": -0.0003, "ci_lo": -0.0019, "ci_hi": 0.0014,
           "rel_pct": -0.03, "within_threshold": True,
           "k_pos": 3, "n_signs": 5, "sign_p": 0.500, "n": 5},
-    # gamma-0.6 tranche, verified against results_boundary_p4_gamma06_complete.csv
-    # (5/5 CD + 5/5 CI seeds, merged from slices slice1/slice2/slice3 with no
-    # seed/mode overlap).
     0.6: {"ci": 0.9759, "cd": 0.9761, "ratio": 1.0002,
           "cd_minus_ci": 0.0002, "ci_lo": -0.0014, "ci_hi": 0.0019,
           "rel_pct": 0.02, "within_threshold": True,
           "k_pos": 3, "n_signs": 5, "sign_p": 0.500, "n": 5},
 }
-# gamma -> {"new": new-env CI mean or None (not yet measured), "old": old-env CI
-# mean}, 4 dp. The old-env means double as the published tab:boundary P=4 CI
-# cells. A gamma with no old-env reference at all (e.g. gamma=0) is absent from
-# this dict entirely, not represented with a None old value.
 _ORACLE_REPRO = {
     0.6: {"new": 0.9759, "old": 0.9757},
     0.9: {"new": 0.9749, "old": 0.9743},
@@ -140,17 +137,31 @@ def repo_root() -> Path:
         "inside the repository or pass explicit CSV paths.")
 
 
+def _warn_if_diverged(preferred: Path, revision_root: Path, filename: str) -> None:
+    """Flag byte-level disagreement between the preferred boundary-P4 folder and
+    any typo'd sibling holding the same filename. The two have been observed to
+    drift in this project (2026-08-16); silently preferring one is not safe."""
+    for other in sorted(revision_root.glob("train_bound*_p4")):
+        if other == preferred:
+            continue
+        a, b = preferred / filename, other / filename
+        if a.exists() and b.exists() and a.read_bytes() != b.read_bytes():
+            print(f"WARNING: {filename} differs between {preferred} and {other}; "
+                  f"using {preferred}. Verify which copy is current.", file=sys.stderr)
+
+
 def boundary_p4_root(root: Path) -> Path:
     """Locate the boundary P=4 results folder under results/Revision/.
 
-    Prefers the correctly-spelled train_boundary_p4. Falls back to a
-    train_bound*_p4 glob so a local "train_boundry_p4" typo (must never
+    Prefers the correctly-spelled train_boundary_p4_temp. Falls back to a
+    train_bound*_p4 glob so a local "train_boundary_p4" typo (must never
     reach a committed path) does not break default
     resolution — but fails loudly rather than silently guessing if the glob
     is ambiguous or empty.
     """
-    exact = root / "results" / "Revision" / "train_boundary_p4"
+    exact = root / "results" / "Revision" / "train_boundary_p4_temp"
     if exact.is_dir():
+        _warn_if_diverged(exact, root / "results" / "Revision", NEW_CSV_NAME)
         return exact
     matches = sorted((root / "results" / "Revision").glob("train_bound*_p4"))
     if len(matches) == 1:
@@ -158,7 +169,7 @@ def boundary_p4_root(root: Path) -> Path:
     if not matches:
         raise FileNotFoundError(
             "no train_bound*_p4 folder found under results/Revision/ "
-            "(expected train_boundary_p4; pass an explicit CSV path if the "
+            "(expected train_boundary_p4_temp; pass an explicit CSV path if the "
             "local folder uses a different name)")
     raise FileNotFoundError(
         f"ambiguous boundary P=4 folder — found {matches}; pass an explicit "
@@ -188,10 +199,6 @@ def default_new_csv() -> Path:
 
 
 def load_new(path: Path) -> pd.DataFrame:
-    """Schema and protocol-identity checks for one CSV. Cross-gamma balance
-    (every gamma has a matched CD/CI seed set) is checked after unioning in
-    load_new_multi, since that guard must see the full merged table, not any
-    one input file in isolation."""
     df = pd.read_csv(path)
     missing = set(SCHEMA) - set(df.columns)
     if missing:
@@ -210,18 +217,11 @@ def load_new(path: Path) -> pd.DataFrame:
 
 
 def load_new_multi(paths: list[Path]) -> pd.DataFrame:
-    """Union any number of current-environment CSVs (any gamma coverage),
-    guarding against the same duplicate-key and unbalanced-cell failures a
-    single-file load already guarded against, now checked on the merged
-    table so a tranche split across files (e.g. gamma-0.9 and gamma-0 in
-    separate files) is validated exactly as if it had always been one file."""
     frames = [load_new(p) for p in paths]
     merged = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
     if len(frames) > 1 and merged.duplicated(["gamma", "mode", "seed"]).any():
         dups = merged[merged.duplicated(["gamma", "mode", "seed"], keep=False)]
         raise ValueError(f"duplicate (gamma, mode, seed) rows across input files:\n{dups}")
-    # Balance guard: make_diff_frame silently drops an unmatched (gamma, seed),
-    # shrinking n without warning. Refuse a cell that is not a full CD/CI pair.
     for gamma, cell in merged.groupby("gamma"):
         by_mode = {m: sorted(g.seed.tolist()) for m, g in cell.groupby("mode")}
         if set(by_mode) != {"CI", "CD"} or by_mode.get("CI") != by_mode.get("CD"):
@@ -230,8 +230,6 @@ def load_new_multi(paths: list[Path]) -> pd.DataFrame:
 
 
 def load_committed_ci(path: Path) -> pd.DataFrame:
-    """The committed reference must be exactly what it claims to be
-    (adjacent-but-wrong-artifact guard, twice bitten in this project)."""
     df = pd.read_csv(path)
     missing = set(SCHEMA) - set(df.columns)
     if missing:

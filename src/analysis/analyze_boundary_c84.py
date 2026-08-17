@@ -1,22 +1,20 @@
-"""C=84 three-arm lightweight-CD ablation (reviewer yc7L Recommended 2), B10.
+"""C=84 three-arm lightweight-CD ablation for the AR(1) grid.
 
-Pre-registered before the underlying data exists, per this project's P4
-discipline (analysis scripts written before results, so methodology
-cannot be shaped by which direction the numbers happen to land). Do not
-add oracle target values to this file until a real committed CSV exists
-and the analysis has run against it once -- see FREEZING THE ORACLE below.
+The analysis was pre-registered before the underlying data existed, so
+the methodology could not be shaped by which direction the numbers
+landed. Oracle values below were frozen at the first run against the
+committed results file.
 
 Reads a self-contained results file for the AR(1) grid at C=84, modes
-{CI, CD, CD_Block}, rho in whichever subset of {0.1, 0.5, 0.9} was
-launched (OQ8, still open: one rho or all three), 5 seeds each
-({42, 123, 456, 789, 1011}), pred_len=96. This is DELIBERATELY not
-results_grid.csv: that file's existing C=84 CD/CI rows were trained under
-the pre-fusion environment at forced batch 1 (a hardware-forced artefact,
-not the current protocol), so per P1 (new rows never pair against
-committed rows run under a different environment) this script expects a
-new, separate file -- naming convention below assumes
-results_boundary_c84.csv, adjust --csv if the actual launch used a
-different name.
+{CI, CD, CD_Block}, 5 seeds each ({42, 123, 456, 789, 1011}),
+pred_len=96. The launch covered the single cell rho=0.5, with all five
+seeds generated at 14,400 timesteps (8,033 training windows). This is
+deliberately not results_grid.csv: that file's existing C=84 CD/CI rows
+were trained under the earlier environment at forced batch 1, and its
+seeds 42/123/456 use a 13,400-timestep generation, so rows from the two
+files are never paired. Seeds 789/1011 share the 14,400-timestep
+generation across both files, and the CI rows for those two seeds
+reproduce the committed grid values exactly.
 
 CD_Block partition: necessarily neutral (contiguous groups), since the
 AR(1) grid's compound-symmetry covariance has no leader-follower or
@@ -30,26 +28,20 @@ Outputs, matching analyze_block_attention.py's structure so the two
 three-arm ablations in this paper report in a consistent shape: the
 per-rho pivot (mean test MSE per arm, CD/CI, Blk/CI, Blk/CD ratios), the
 three paired per-seed contrasts with 95% paired-t CIs (df=4) via the
-shared paired_stats machinery, and per-arm best_epoch ranges (useful
-since C=84's convergence behaviour is a live open question -- CI's
-C=84 s/epoch was UNMEASURED as of the B10 decision, gating the sweep on
-a first-session measurement per P2).
+shared paired_stats machinery, and per-arm best_epoch ranges.
 
-FREEZING THE ORACLE
---------------------
-This script currently has NO oracle section -- there is nothing to freeze
-against real data that does not exist yet. Once the C=84 run completes
-and this script has been run against it once, add an oracle_check
-function following analyze_block_attention.py's exact pattern (pinned
-pivot values to 4dp, paired sign-test outcomes, best_epoch ranges) and
-freeze it in the same commit as the results CSV, per this project's
-provenance discipline (a number enters a response only via an
-oracle-passing script). Do not add oracle numbers speculatively before
-that point.
+ORACLE
+------
+Pinned values (pivot to 4dp, paired contrasts, sign patterns, exact
+one-sided sign-test p for CD-CI, best_epoch ranges) were frozen at the
+first run against the committed results file and are committed together
+with it. The check runs on every invocation; rho cells present in the
+file but absent from the oracle tables fail the run until frozen, so
+future sweep extensions cannot enter reporting unverified.
 
-Run:
+Run from the repository root:
 
-    python src/analysis/analyze_boundary_c84.py --csv path/to/results_boundary_c84.csv
+    python src/analysis/analyze_boundary_c84.py
 """
 
 import argparse
@@ -61,18 +53,16 @@ from scipy import stats
 import paired_stats as ps  # sibling module; on sys.path when run as a script
 
 _ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_CSV = _ROOT / "results" / "Revision" / "train_boundary_c84" / "results_boundary_c84.csv"
+_DEFAULT_CSV = _ROOT / "results" / "Revision" / "train_grid_c84_block_attn" / "results_grid_C84_block_attn.csv"
 
 _MODES: tuple[str, ...] = ("CI", "CD", "CD_Block")
 _SEED_ORDER: tuple[int, ...] = (42, 123, 456, 789, 1011)
 _C = 84
 _PRED_LEN = 96
 _REQUIRED_COLS: set[str] = {"C", "rho", "mode", "pred_len", "seed", "test_mse", "best_epoch", "batch_size"}
-# Committed protocol: CD-family arms and CI share one batch policy decision
-# at C=84, unlike the leader-follower sweep where CI and CD differ (128 vs
-# 8) -- confirm against the launch notebook's CFG once it exists; this is
-# a placeholder pending that confirmation (OQ8), not an assumption to trust
-# blindly. Left permissive (no batch-policy assertion) until then.
+# Launch batch policy, asserted in load_results: CI at batch 32; CD and
+# CD_Block at batch 8 over the flattened C*N=5292 token sequence.
+_BATCH_POLICY: dict[str, int] = {"CI": 32, "CD": 8, "CD_Block": 8}
 
 
 def load_results(path: Path, expected_rhos: set[float] | None = None) -> pd.DataFrame:
@@ -83,8 +73,8 @@ def load_results(path: Path, expected_rhos: set[float] | None = None) -> pd.Data
         expected_rhos: If given, the exact rho set the file must contain
             (e.g. {0.5} for a single-cell launch, or {0.1, 0.5, 0.9} for
             the full sweep). If None, whatever rho values are present are
-            accepted and reported, deferring the OQ8 scope decision to
-            the caller rather than baking one choice into this script.
+            accepted and reported, deferring the scope decision to the
+            caller rather than baking one choice into this script.
 
     Returns:
         The results frame, unmodified.
@@ -92,14 +82,11 @@ def load_results(path: Path, expected_rhos: set[float] | None = None) -> pd.Data
     Raises:
         FileNotFoundError: If the file is absent.
         ValueError: If required columns, modes, C, pred_len, the balanced
-            5-seed design, or (if given) the expected rho set are violated.
+            5-seed design, the per-mode batch policy, the total_steps
+            identity, or (if given) the expected rho set are violated.
     """
     if not path.exists():
-        raise FileNotFoundError(
-            f"C=84 results CSV not found: {path}. This is expected until the "
-            f"B10 launch completes -- this script is pre-registered ahead of "
-            f"the data, per P4."
-        )
+        raise FileNotFoundError(f"C=84 results CSV not found: {path}")
     df = pd.read_csv(path)
     missing = _REQUIRED_COLS - set(df.columns)
     if missing:
@@ -123,6 +110,17 @@ def load_results(path: Path, expected_rhos: set[float] | None = None) -> pd.Data
                     f"{mode} rho={rho}: seeds {seeds} over {len(cell)} rows "
                     f"do not match one row per seed in {sorted(_SEED_ORDER)}"
                 )
+    for mode, batch in _BATCH_POLICY.items():
+        found = sorted(df.loc[df["mode"] == mode, "batch_size"].unique())
+        if found != [batch]:
+            raise ValueError(f"{mode} batch_size must be {batch}; found {found}")
+    if {"total_steps", "steps_per_epoch"} <= set(df.columns):
+        bad = df["total_steps"] != df["best_epoch"] * df["steps_per_epoch"]
+        if bad.any():
+            raise ValueError(
+                f"{int(bad.sum())} rows violate total_steps == best_epoch * "
+                f"steps_per_epoch; validation-best restore is not verifiable."
+            )
     return df
 
 
@@ -220,18 +218,101 @@ def best_epoch_ranges(df: pd.DataFrame) -> dict[str, tuple[int, int]]:
     }
 
 
+# Oracle values frozen at the first run against the committed results file
+# (15 rows, single cell rho=0.5). Pivot entries are (ci, cd, blk, cd_ci,
+# blk_ci, blk_cd) to 4dp. Contrast entries are (mean_diff, ci_lo, ci_hi)
+# to 4dp, the relative mean difference in percent of the base arm to 2dp,
+# and the per-seed sign string in _SEED_ORDER order. Rho keys are compared
+# after rounding to 4dp.
+_ORACLE_PIVOT: dict[float, tuple[float, float, float, float, float, float]] = {
+    0.5: (1.0076, 1.0045, 1.0050, 0.9969, 0.9974, 1.0005),
+}
+_ORACLE_CONTRASTS: dict[str, dict[float, tuple[float, float, float, float, str]]] = {
+    "CD-CI":  {0.5: (-0.0031, -0.0105, +0.0042, -0.31, "+-+--")},
+    "Blk-CI": {0.5: (-0.0027, -0.0093, +0.0039, -0.26, "+----")},
+    "Blk-CD": {0.5: (+0.0005, -0.0022, +0.0032, +0.05, "-+-++")},
+}
+_ORACLE_CDCI_SIGN_P: dict[float, float] = {0.5: 0.812}
+_ORACLE_BEST_EPOCH: dict[str, tuple[int, int]] = {
+    "CI": (9, 17), "CD": (6, 7), "CD_Block": (6, 10),
+}
+_ORACLE_ROWS = 15
+
+
+def oracle_check(
+    df: pd.DataFrame,
+    body: pd.DataFrame,
+    contr: dict[str, pd.DataFrame],
+    epochs: dict[str, tuple[int, int]],
+) -> bool:
+    """Compare recomputed values against the frozen oracle tables.
+
+    Every rho present in the data must have a frozen entry in every table;
+    an unfrozen rho is a failure, not a skip, so extending the sweep forces
+    a deliberate re-freeze rather than silently passing new cells through.
+
+    Args:
+        df: Output of load_results.
+        body: Output of pivot_body.
+        contr: Output of contrasts.
+        epochs: Output of best_epoch_ranges.
+
+    Returns:
+        True if every check passes.
+    """
+    failures: list[str] = []
+
+    if len(df) != _ORACLE_ROWS:
+        failures.append(f"row count {len(df)} != {_ORACLE_ROWS}")
+
+    for _, row in body.iterrows():
+        rho = round(float(row["rho"]), 4)
+        pinned = _ORACLE_PIVOT.get(rho)
+        if pinned is None:
+            failures.append(f"rho={rho}: no frozen pivot entry")
+            continue
+        got = tuple(round(float(row[k]), 4) for k in ("ci", "cd", "blk", "cd_ci", "blk_ci", "blk_cd"))
+        if got != pinned:
+            failures.append(f"rho={rho}: pivot {got} != {pinned}")
+
+    for label, frame in contr.items():
+        for _, row in frame.iterrows():
+            rho = round(float(row["rho"]), 4)
+            pinned = _ORACLE_CONTRASTS[label].get(rho)
+            if pinned is None:
+                failures.append(f"{label} rho={rho}: no frozen contrast entry")
+                continue
+            got = (round(float(row["mean_diff"]), 4), round(float(row["ci_lo"]), 4),
+                   round(float(row["ci_hi"]), 4), round(float(row["rel_pct"]), 2),
+                   str(row["signs"]))
+            if got != pinned:
+                failures.append(f"{label} rho={rho}: {got} != {pinned}")
+            if label == "CD-CI":
+                p_pinned = _ORACLE_CDCI_SIGN_P.get(rho)
+                p_got = round(sign_test_p(str(row["signs"])), 3)
+                if p_pinned is None or p_got != p_pinned:
+                    failures.append(f"CD-CI rho={rho}: sign p {p_got} != {p_pinned}")
+
+    for mode, pinned_range in _ORACLE_BEST_EPOCH.items():
+        if epochs.get(mode) != pinned_range:
+            failures.append(f"{mode} best_epoch {epochs.get(mode)} != {pinned_range}")
+
+    for msg in failures:
+        print(f"  [ORACLE FAIL] {msg}")
+    return not failures
+
+
 def main(argv: list[str] | None = None) -> int:
     """Report the C=84 three-arm pivot, paired contrasts, and best_epoch ranges.
 
-    No oracle check: see the FREEZING THE ORACLE section in the module
-    docstring. Exit code is always 0 (structural/schema failures raise
-    directly; there is no PASS/FAIL oracle gate yet to report).
+    Ends with the frozen-oracle check (see the ORACLE section in the
+    module docstring). Structural and schema failures raise directly.
 
     Args:
         argv: Optional argument vector (defaults to sys.argv).
 
     Returns:
-        0.
+        0 if the oracle check passes, 1 otherwise.
     """
     parser = argparse.ArgumentParser(
         description="C=84 three-arm lightweight-CD ablation (pivot, paired contrasts, best_epoch)."
@@ -277,17 +358,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"({row['rel_pct']:+.2f}% of {base_of[label]}){sign_note}"
             )
 
-    print("\n=== BEST_EPOCH RANGES (convergence check -- C=84 CI s/epoch was UNMEASURED pre-launch) ===")
+    print("\n=== BEST_EPOCH RANGES ===")
     for mode, (lo, hi) in epochs.items():
         print(f"  {mode}: {lo}-{hi}")
 
-    print(
-        "\nNo oracle check: this script is pre-registered ahead of the C=84 "
-        "data. Once real results exist, run this once, freeze the printed "
-        "values into an oracle_check function following "
-        "analyze_block_attention.py's pattern, and commit both together."
-    )
-    return 0
+    print()
+    passed = oracle_check(df, body, contr, epochs)
+    print(f"RESULT: {'PASS' if passed else 'FAIL'}")
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ paper's key conditioning claim is never waved through as sampling noise.
 Usage
 -----
 python validate_granger.py [--gamma GAMMA [GAMMA ...]] [--rho RHO] [--seed SEED]
-Default gamma sweep is {0.0, 0.3, 0.6, 0.9} -- all four values used in the
+Default gamma sweep is {0.0, 0.3, 0.6, 0.9}, all four values used in the
 leader-follower experiment. Run from the repository root.
 
 Outputs to console only; no files written.
