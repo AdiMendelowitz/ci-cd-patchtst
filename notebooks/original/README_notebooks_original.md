@@ -52,25 +52,34 @@ for a comment reworded in `train_boundary_p4_ci.ipynb` and
 `train_boundary_p4_full_plan.ipynb` at retrieval time; no code,
 configuration, or output differs from the as-ran files.
 
-STALE NOTICE (09 Aug 2026): a repository-wide terminology sweep
-(scripts_provenance.md Part K) subsequently renamed each file's markdown
-title cell — `Account A`/`Account B` became `Slice A`/`Slice B` — in all
-six files below. Only that markdown text changed; no code, configuration,
-or output cell was touched by the sweep, so the training protocol
-documented above remains accurate and verified as stated. But every hash
-in the table below now describes the pre-sweep file and will NOT match
-the current on-disk or currently-committed copy. Recomputation against
-the current files is owed before this table can be used for verification
-again; the values below are retained as the historical record of the
-04 Aug retrieval commit, not deleted, per this project's own artefact
+VERIFIED CURRENT (17 Aug 2026): SHA256 recomputed fresh against the current
+on-disk files and checked against every value in the table below -- all six
+match exactly. The STALE NOTICE below, written 09 Aug 2026 when the table
+was genuinely out of date, described a state that no longer holds: the
+table's own "12 Aug 2026, current" caption reflects a recomputation that
+did happen, this notice just wasn't removed afterward. Retained beneath
+this note as the historical record of that gap, per this project's own
+artefact discipline, rather than deleted.
+
+STALE NOTICE (09 Aug 2026, superseded 12 Aug 2026 -- see note above): a
+repository-wide terminology sweep (scripts_provenance.md Part K) subsequently
+renamed each file's markdown title cell — `Account A`/`Account B` became
+`Slice A`/`Slice B` — in all six files below. Only that markdown text changed;
+no code, configuration, or output cell was touched by the sweep, so the
+training protocol documented above remains accurate and verified as stated.
+But every hash in the table below now describes the pre-sweep file and will
+NOT match the current on-disk or currently-committed copy. Recomputation
+against the current files is owed before this table can be used for
+verification again; the values below are retained as the historical record
+of the 04 Aug retrieval commit, not deleted, per this project's own artefact
 discipline (a wrong hash left silently in place is worse than no hash —
 mark and recompute, never leave standing).
 
-| File | SHA256 (04 Aug 2026 commit — STALE, see notice above) |
+| File | SHA256 (12 Aug 2026, current) |
 |---|---|
-| `train_boundary_grid_n3.ipynb` | `3fd70587b1004e0d38de6fd5d1321a1e0675f557db00b441574845fdf6d1e2f2` |
-| `train_boundary_grid_n5.ipynb` | `fc961690559a6f6c69caee288663253d24ef1719856501bc94e05346b470356d` |
-| `train_boundary_grid_n5_resume.ipynb` | `eb784961c818a24b683217ca083e74ca5b18a39635945648dd15824f90283c2b` |
-| `train_boundary_p4_ci.ipynb` | `2312893dfcdaa39012d79e0b642697446ae5cf9f8dc86f25669219af71a78e41` |
-| `train_boundary_p4_ci_dlinear.ipynb` | `030d4c20bd05a8bd27de969eda151aaa075292c6dea33ef08217f103c3d8b4dd` |
-| `train_boundary_p4_full_plan.ipynb` | `e81c8800c56de37d410a6b584876332807cbfe86698f5df0520f2934de708ee9` |
+| `train_boundary_grid_n3.ipynb` | `4831117041703c6e369bdd847c8d0748270e8fa4db565b0ce53e7de3ff52dad9` |
+| `train_boundary_grid_n5.ipynb` | `f7e5f0fd31d152a1e88348057eabc3b26c3c7f871b6569f121408fa4c406ddce` |
+| `train_boundary_grid_n5_resume.ipynb` | `aed8d4e1fd45e5792aa825e7bd4998688546945554f23c7df38aae6c409795ac` |
+| `train_boundary_p4_ci.ipynb` | `25bda49c44df21416ab48dcc03548990113f9febdbd05f8addae386887ef028e` |
+| `train_boundary_p4_ci_dlinear.ipynb` | `4d3dfbae2d9c2f02f9150953daa8306864fd28d7118b8c1e92a749ad49bdd950` |
+| `train_boundary_p4_full_plan.ipynb` | `d8091503c283d8b610df61c371696596be814d0f06036f972300ee4b3fcec4ab` |
