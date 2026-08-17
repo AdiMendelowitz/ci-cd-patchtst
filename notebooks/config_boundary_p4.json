@@ -1,0 +1,31 @@
+{
+  "config_version": 1,
+  "assignment": "acct2-tranche1-gamma09",
+  "session_budget_hours": 11.0,
+  "patch_size": 4,
+  "batch_size": 128,
+  "runs": [
+    {
+      "gamma": 0.9,
+      "mode": "CD",
+      "seeds": [
+        42,
+        123,
+        456,
+        789,
+        1011
+      ]
+    },
+    {
+      "gamma": 0.9,
+      "mode": "CI",
+      "seeds": [
+        42,
+        123,
+        456,
+        789,
+        1011
+      ]
+    }
+  ]
+}
