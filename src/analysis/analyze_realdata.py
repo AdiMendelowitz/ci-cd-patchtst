@@ -116,17 +116,17 @@ _BUDGET_COLS: frozenset[str] = frozenset({"steps_per_epoch", "total_steps_to_bes
 _ECL_ARCH_VERSION = 2  # Architecture revision matching the committed models.py.
 
 # Oracle targets for realdata_corr_summary.csv, quoted from main.tex Section 3.2
-# ("Correlation and lead-lag structure"). Populate each tuple as
-# (lag0_mean_abs_r, lag0_median_abs_r, mean_max_over_lags, pct_pairs_gain) once
-# a run against the current data files (ECL train_rows=15813) has been reviewed
-# by hand; leave a dataset's entry as None until then. This oracle was never
-# populated in an earlier project phase and the underlying script was retired
-# out of the repository with an incorrect ECL row count (15,840 instead of
-# 15,813); treat every number currently in the paper as unverified until this
-# oracle is filled in against a fresh run.
+# ("Correlation and lead-lag structure"). Each tuple is
+# (lag0_mean_abs_r, lag0_median_abs_r, mean_max_over_lags, pct_pairs_gain).
+# Pinned from a run against the current data files under the corrected ECL
+# split (train_rows=15813, fixing an earlier 15,840 row-count error in the
+# now-retired sandbox version of measure_lag_structure.py). Verified by hand
+# against main.tex on 18 Aug 2026: every figure the paper states rounds to
+# these values at the precision it reports them, so the earlier row-count
+# error did not change any number actually printed in the paper.
 _ORACLE_CORR: dict[str, tuple[float, float, float, float] | None] = {
-    "ETTh1": None,
-    "ECL": None,
+    "ETTh1": (0.311013, 0.232797, 0.349276, 42.86),
+    "ECL": (0.502687, 0.482602, 0.596492, 49.09),
 }
 _ORACLE_TOLERANCE = 1e-4
 
