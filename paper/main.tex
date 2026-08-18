@@ -440,6 +440,22 @@ horizon and batch size -- an $8.9\times$ cost ratio -- so a worst-case 50-epoch 
         \end{tabular}
     \end{table}
 
+    \paragraph{ETTh1 subgroups by lagged coupling strength.} To test whether CI's edge concentrates where lagged
+    cross-channel coupling is strongest, we partition test windows by lagged coupling strength, using the mean
+    absolute lag-1 cross-correlation of first differences as the primary metric, pre-registered before the error data
+    existed, with the raw lag-1 statistic as a robustness check since the two rank windows in near-opposite order on
+    this data. The metric is strongly autocorrelated across window starts, so median splits form contiguous time
+    regimes and any subgroup gap is partially confounded with regime; inference aggregates errors to run level per
+    subset before pairing by seed. Under the primary split, the CD$-$CI contrast is: $H=96$ high-coupling $+0.0058$
+    (95\% CI $[-0.0159, +0.0276]$) vs.\ low-coupling $+0.0450$ ($[+0.0208, +0.0692]$); $H=192$ high $+0.0183$
+    ($[-0.0151, +0.0517]$) vs.\ low $+0.0466$ ($[-0.0258, +0.1190]$); $H=336$ high $-0.0030$ ($[-0.0259, +0.0199]$)
+    vs.\ low $+0.0167$ ($[-0.0089, +0.0423]$); $H=720$ high $+0.0263$ ($[+0.0196, +0.0329]$) vs.\ low $+0.0302$
+    ($[+0.0275, +0.0330]$), all $n=5$ paired over seeds. The low-coupling subgroup's point estimate is as large or
+    larger than the high-coupling subgroup's at every horizon, the opposite of what a coupling-driven-advantage
+    account would predict, so we do not read CI's ETTh1 edge as concentrated in windows of higher lagged
+    cross-channel coupling; this is consistent with the selection-artefact account developed in
+    Section~\ref{sec:robustness} rather than a coupling-exploitation account.
+
     \paragraph{ECL ($C = 321$).} Both modes train at this scale under the single-T4 budget (Section~\ref{sec:setup});
     what differs is cost. The accuracy comparison is deliberately narrow, one seed (456) at $H \in \{96, 336\}$, and is
     reported descriptively with no confidence intervals (Table~\ref{tab:ecl}). CD trails CI at both horizons, by $+0.0133$
@@ -739,6 +755,23 @@ horizon and batch size -- an $8.9\times$ cost ratio -- so a worst-case 50-epoch 
     comparable to the effects themselves, and Section~\ref{sec:theoretical_bound} shows no cross-channel signal is
     available at this horizon to any predictor.
 
+    \paragraph{Candidate mechanisms for the early minimum.} Selection artefacts do not produce the deficit, but the
+    early-minimum-then-degradation shape itself is worth explaining. Three hypotheses are testable with cheap
+    instrumentation: optimisation instability from CD's longer flattened sequence, late-stage representational
+    redundancy across variates, and cross-variate attention overfitting to spurious inter-channel structure. We log
+    per-epoch pre-clip gradient norms for all three arms (CI, CD, CD\_Block) and an encoder-representation participation
+    ratio at the $\gamma = 0.6$ cell, collected during the block-attention sweep of Section~\ref{subsec:block_attn}. The
+    gradient-norm evidence is most consistent with the first hypothesis: CD's final-epoch pre-clip gradient norms exceed
+    the training clip threshold of $1.0$ at every $\gamma > 0$ ($1.17$--$1.23$, against CI's $0.87$--$0.90$ and
+    CD\_Block's comfortably lower $0.82$--$0.84$), and of $216$ nonfinite training steps recorded across the sweep,
+    $115$ occur in CD and $101$ in CD\_Block, none in CI. The participation-ratio panel does not support the second
+    hypothesis as stated: CD's encoder-output feature dimensionality rises over training ($3.75$ to $4.42$; CD\_Block
+    more sharply, $3.87$ to $8.92$) while it is CI's that declines ($4.21$ to $2.64$), the opposite of what redundancy
+    in CD would predict. Neither diagnostic speaks to the third hypothesis, which these instruments were not designed
+    to detect. We read these diagnostics as consistent with the optimisation-instability account for vanilla CD
+    specifically, not as proof of mechanism; they do not alter the behavioural finding above, which does not depend on
+    which mechanism is correct.
+
     \begin{figure}[H]
         \centering
         \includegraphics[width=\linewidth]{diag_overlay_clean.png}
@@ -943,6 +976,19 @@ horizon and batch size -- an $8.9\times$ cost ratio -- so a worst-case 50-epoch 
     $C \cdot N$, would avoid this memory constraint and would allow closing the remaining $P = 2$ gap.
     Implementing such a variant was outside the scope of this work.
 
+    \paragraph{VRAM cost of the memory wall.} The token-count argument above can be made concrete. A naive
+    (non-fused) attention implementation materialises the full $(C \cdot N) \times (C \cdot N)$ score matrix per head
+    per layer; at ECL's architecture ($C \cdot N = 3{,}531$ tokens), this bound is $47.6$ GiB for one encoder layer at
+    batch $128$, and $142.7$ GiB across all three layers if retained simultaneously, both well beyond a T4's $16$ GiB
+    budget from this term alone. Measured peak allocation at the same batch and architecture is $8.13$ GiB, roughly
+    $17\times$ below the three-layer bound ($16.7\times$ at batch $8$, where the bound is $8.9$ GiB against a measured
+    $0.53$ GiB): fused attention kernels in current PyTorch never materialise this term, computing attention with
+    $O(C \cdot N)$ working memory per head via online softmax instead, which accounts for the entire gap between the
+    worked bound and the measurement. The $P = 2$ memory wall reported above is therefore a property of the
+    non-fused attention implementation used for this paper's runs rather than of channel-dependent attention in
+    general; the $O(C^2 N^2)$ compute cost is unaffected by kernel fusion and remains the binding constraint at this
+    scale, consistent with the cost asymmetry reported throughout this paper.
+
     The $\gamma = 0.6$ diagnostic in Section~\ref{subsec:overtrain} rests on one instrumented rerun per (mode, seed) at a
     single cell. Those reruns do not exactly reproduce the original runs: the CD arm's rerun test MSE is lower than its
     original on all five seeds, and the cause is unidentified. Seeds, batch sizes, steps per epoch, and stopping rule are
@@ -1052,9 +1098,13 @@ horizon and batch size -- an $8.9\times$ cost ratio -- so a worst-case 50-epoch 
     ($\text{pred\_len} = 96$, with the short-horizon regime identified in Section~\ref{sec:theoretical_bound} untested)
     and at $C = 21$ for the leader-follower experiments. The $P = 2$ CD configuration, where
     attention resolution most closely matches the lag-1 coupling scale, is the most direct comparison left undone because
-    its $C \cdot N = 10{,}731$ token sequence exceeds T4 memory. The overtraining we document is a phenomenon we can measure
-    but not yet explain: CD reaches its validation minimum earlier and worsens past it under this protocol and data, and we
-    do not establish why, nor what produces the residual $\gamma = 0.6$ deficit once selection is ruled out.
+    its $C \cdot N = 10{,}731$ token sequence exceeds T4 memory. The overtraining we document is a phenomenon we can
+    measure and now have diagnostic, not conclusive, evidence for: gradient-norm and nonfinite-step evidence is
+    consistent with optimisation instability in vanilla CD (Section~\ref{subsec:overtrain}), participation-ratio
+    evidence rules out a representational-redundancy account, and neither diagnostic can speak to attention
+    overfitting. CD reaches its validation minimum earlier and worsens past it under this protocol and data, and we
+    do not treat the mechanism question as settled, nor do we know what produces the residual $\gamma = 0.6$ deficit
+    once selection is ruled out.
     A variate-token CD implementation would remove the memory wall and let the boundary sweep and
     the $P = 2$ comparison be run directly; whether the null survives that formulation is the natural next test.
 
