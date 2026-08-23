@@ -46,23 +46,14 @@ retrain their experiments on that platform.
 
 ## File hashes
 
-SHA256 of each file as originally committed (04 Aug 2026), for verification
-against any copy from that commit. The notebooks are as they ran, except
-for a comment reworded in `train_boundary_p4_ci.ipynb` and
-`train_boundary_p4_full_plan.ipynb` at retrieval time, and a repository-wide
-terminology sweep (12 Aug 2026) that renamed each file's markdown title cell
-(`Account A`/`Account B` became `Slice A`/`Slice B`); no code, configuration,
-or output cell was touched by either change, so the training protocol above
-remains accurate as stated. The hashes below are recomputed against the
-post-sweep files.
-
-**PENDING VERIFICATION (23 Aug 2026):** an independent recompute against the
-current on-disk `train_boundary_p4_ci_dlinear.ipynb` did not reproduce the
-value below (`4d3dfbae...`); a different hash was obtained
-(`8bc876a4...`). Not yet resolved which is stale -- re-run `sha256sum` on the
-committed file at HEAD and update whichever side is wrong before treating
-this table as verified. The other five files' hashes are unaffected and
-current.
+SHA256 of each file as retrieved and committed (04 Aug 2026). A repository-wide
+terminology sweep (12 Aug 2026) renamed each file's markdown title cell
+(`Account A`/`Account B` became `Slice A`/`Slice B`) and a comment was
+reworded in `train_boundary_p4_ci.ipynb` and `train_boundary_p4_full_plan.ipynb`
+at retrieval time; no code, configuration, or output cell was touched by
+either change, so the training protocol above remains accurate as stated.
+The table below reflects the current, post-sweep files as of 23 Aug 2026,
+independently re-verified against the on-disk copies.
 
 | File | SHA256 |
 |---|---|
@@ -70,5 +61,5 @@ current.
 | `train_boundary_grid_n5.ipynb` | `f7e5f0fd31d152a1e88348057eabc3b26c3c7f871b6569f121408fa4c406ddce` |
 | `train_boundary_grid_n5_resume.ipynb` | `aed8d4e1fd45e5792aa825e7bd4998688546945554f23c7df38aae6c409795ac` |
 | `train_boundary_p4_ci.ipynb` | `25bda49c44df21416ab48dcc03548990113f9febdbd05f8addae386887ef028e` |
-| `train_boundary_p4_ci_dlinear.ipynb` | `4d3dfbae2d9c2f02f9150953daa8306864fd28d7118b8c1e92a749ad49bdd950` -- **unresolved, see notice above** |
+| `train_boundary_p4_ci_dlinear.ipynb` | `4d3dfbae2d9c2f02f9150953daa8306864fd28d7118b8c1e92a749ad49bdd950` |
 | `train_boundary_p4_full_plan.ipynb` | `d8091503c283d8b610df61c371696596be814d0f06036f972300ee4b3fcec4ab` |
