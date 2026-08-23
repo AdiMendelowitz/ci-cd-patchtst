@@ -1,0 +1,121 @@
+ecl_ci_cd_train_resumable
+ecl_ci_cd_train_resumable
+
+Share
+
+Edit
+
+Download
+Logs
+
+Download Logs
+Successfully ran in 38436.6s
+Accelerator
+GPU T4 x2
+
+Environment
+Latest Container Image
+
+Output
+58 MB
+
+Time
+#
+Log Message
+6.4s	1	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+6.4s	2	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+6.4s	3	0.00s - to python to disable frozen modules.
+6.4s	4	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+7.0s	5	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+7.0s	6	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+7.0s	7	0.00s - to python to disable frozen modules.
+7.0s	8	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+13.2s	9	Device: cuda
+13.7s	10	
+13.7s	11	============================================================
+13.7s	12	Mode: CI | pred_len: 96 | seed: 456
+13.7s	13	============================================================
+15.7s	14	ECLDataset [train]: 15813 rows from 26304 total (train_end=15813, val_end=21060)
+17.2s	15	ECLDataset [val]: 5247 rows from 26304 total (train_end=15813, val_end=21060)
+18.6s	16	ECLDataset [test]: 5244 rows from 26304 total (train_end=15813, val_end=21060)
+23.7s	17	[CI pred=96 seed=456] params: 732,256 | batch: 8 | accum: 1 | effective_batch: 8 | steps/epoch: 1953 | effective_steps/epoch: 1953 | CD_tokens: N/A | start_epoch: 1
+166.9s	18	  [CI pred=96 seed=456] Epoch   1/50 | train MSE 0.2910 | val MSE 0.2201 | lr 4.00e-05 | 143s/ep | 143s total
+744.0s	19	  [CI pred=96 seed=456] Epoch   5/50 | train MSE 0.1921 | val MSE 0.1890 | lr 1.00e-04 | 144s/ep | 720s total
+1464.3s	20	  [CI pred=96 seed=456] Epoch  10/50 | train MSE 0.1780 | val MSE 0.1786 | lr 9.70e-05 | 144s/ep | 1440s total
+2183.9s	21	  [CI pred=96 seed=456] Epoch  15/50 | train MSE 0.1714 | val MSE 0.1722 | lr 8.83e-05 | 144s/ep | 2160s total
+2903.5s	22	  [CI pred=96 seed=456] Epoch  20/50 | train MSE 0.1675 | val MSE 0.1698 | lr 7.50e-05 | 144s/ep | 2880s total
+3622.6s	23	  [CI pred=96 seed=456] Epoch  25/50 | train MSE 0.1651 | val MSE 0.1670 | lr 5.87e-05 | 144s/ep | 3599s total
+4341.3s	24	  [CI pred=96 seed=456] Epoch  30/50 | train MSE 0.1632 | val MSE 0.1656 | lr 4.13e-05 | 144s/ep | 4317s total
+5060.2s	25	  [CI pred=96 seed=456] Epoch  35/50 | train MSE 0.1621 | val MSE 0.1657 | lr 2.50e-05 | 144s/ep | 5036s total
+5779.2s	26	  [CI pred=96 seed=456] Epoch  40/50 | train MSE 0.1613 | val MSE 0.1652 | lr 1.17e-05 | 144s/ep | 5755s total
+6498.4s	27	  [CI pred=96 seed=456] Epoch  45/50 | train MSE 0.1608 | val MSE 0.1644 | lr 3.02e-06 | 144s/ep | 6474s total
+7217.8s	28	  [CI pred=96 seed=456] Epoch  50/50 | train MSE 0.1607 | val MSE 0.1643 | lr 0.00e+00 | 144s/ep | 7194s total
+7229.2s	29	  [CI pred=96 seed=456] Test MSE: 0.1753 | Test MAE: 0.2602 | Best val MSE: 0.1639 @ epoch 42
+7229.2s	30	  Results written (1/4 runs complete)
+7229.2s	31	
+7229.2s	32	============================================================
+7229.2s	33	Mode: CD | pred_len: 96 | seed: 456
+7229.2s	34	============================================================
+7230.8s	35	ECLDataset [train]: 15813 rows from 26304 total (train_end=15813, val_end=21060)
+7232.3s	36	ECLDataset [val]: 5247 rows from 26304 total (train_end=15813, val_end=21060)
+7233.6s	37	ECLDataset [test]: 5244 rows from 26304 total (train_end=15813, val_end=21060)
+7233.6s	38	[CD pred=96 seed=456] params: 732,256 | batch: 8 | accum: 1 | effective_batch: 8 | steps/epoch: 1953 | effective_steps/epoch: 1953 | CD_tokens: 3531 | start_epoch: 1
+8202.4s	39	  [CD pred=96 seed=456] Epoch   1/50 | train MSE 0.2940 | val MSE 0.2356 | lr 4.00e-05 | 969s/ep | 969s total
+12077.2s	40	  [CD pred=96 seed=456] Epoch   5/50 | train MSE 0.1963 | val MSE 0.2030 | lr 1.00e-04 | 969s/ep | 4843s total
+16921.6s	41	  [CD pred=96 seed=456] Epoch  10/50 | train MSE 0.1793 | val MSE 0.1904 | lr 9.70e-05 | 968s/ep | 9688s total
+21764.8s	42	  [CD pred=96 seed=456] Epoch  15/50 | train MSE 0.1689 | val MSE 0.2009 | lr 8.83e-05 | 969s/ep | 14531s total
+26608.7s	43	  [CD pred=96 seed=456] Epoch  20/50 | train MSE 0.1623 | val MSE 0.1995 | lr 7.50e-05 | 969s/ep | 19375s total
+29514.7s	44	  [CD pred=96 seed=456] Epoch  23/50 | train MSE 0.1593 | val MSE 0.2095 | lr 6.55e-05 | 968s/ep | 22281s total
+29514.7s	45	  [CD pred=96 seed=456] Early stop @ epoch 23. Best: epoch 13.
+29578.3s	46	  [CD pred=96 seed=456] Test MSE: 0.1886 | Test MAE: 0.2780 | Best val MSE: 0.1858 @ epoch 13
+29578.3s	47	  Results written (2/4 runs complete)
+29578.3s	48	
+29578.3s	49	============================================================
+29578.3s	50	Mode: CI | pred_len: 336 | seed: 456
+29578.3s	51	============================================================
+29579.8s	52	ECLDataset [train]: 15813 rows from 26304 total (train_end=15813, val_end=21060)
+29581.3s	53	ECLDataset [val]: 5247 rows from 26304 total (train_end=15813, val_end=21060)
+29582.7s	54	ECLDataset [test]: 5244 rows from 26304 total (train_end=15813, val_end=21060)
+29582.7s	55	[CI pred=336 seed=456] params: 1,070,416 | batch: 8 | accum: 1 | effective_batch: 8 | steps/epoch: 1923 | effective_steps/epoch: 1923 | CD_tokens: N/A | start_epoch: 1
+29726.7s	56	  [CI pred=336 seed=456] Epoch   1/50 | train MSE 0.3124 | val MSE 0.2444 | lr 4.00e-05 | 144s/ep | 144s total
+30300.6s	57	  [CI pred=336 seed=456] Epoch   5/50 | train MSE 0.2099 | val MSE 0.2162 | lr 1.00e-04 | 143s/ep | 718s total
+31016.6s	58	  [CI pred=336 seed=456] Epoch  10/50 | train MSE 0.1987 | val MSE 0.2058 | lr 9.70e-05 | 143s/ep | 1434s total
+31733.3s	59	  [CI pred=336 seed=456] Epoch  15/50 | train MSE 0.1936 | val MSE 0.2022 | lr 8.83e-05 | 143s/ep | 2150s total
+32449.6s	60	  [CI pred=336 seed=456] Epoch  20/50 | train MSE 0.1905 | val MSE 0.1999 | lr 7.50e-05 | 143s/ep | 2867s total
+33165.6s	61	  [CI pred=336 seed=456] Epoch  25/50 | train MSE 0.1884 | val MSE 0.1968 | lr 5.87e-05 | 143s/ep | 3583s total
+33881.5s	62	  [CI pred=336 seed=456] Epoch  30/50 | train MSE 0.1869 | val MSE 0.1991 | lr 4.13e-05 | 143s/ep | 4299s total
+34596.7s	63	  [CI pred=336 seed=456] Epoch  35/50 | train MSE 0.1858 | val MSE 0.2007 | lr 2.50e-05 | 143s/ep | 5014s total
+34596.7s	64	  [CI pred=336 seed=456] Early stop @ epoch 35. Best: epoch 25.
+34607.8s	65	  [CI pred=336 seed=456] Test MSE: 0.2037 | Test MAE: 0.2869 | Best val MSE: 0.1968 @ epoch 25
+34607.8s	66	  Results written (3/4 runs complete)
+34607.8s	67	
+34607.8s	68	============================================================
+34607.8s	69	Mode: CD | pred_len: 336 | seed: 456
+34607.8s	70	============================================================
+34609.4s	71	ECLDataset [train]: 15813 rows from 26304 total (train_end=15813, val_end=21060)
+34610.8s	72	ECLDataset [val]: 5247 rows from 26304 total (train_end=15813, val_end=21060)
+34612.1s	73	ECLDataset [test]: 5244 rows from 26304 total (train_end=15813, val_end=21060)
+34612.1s	74	[CD pred=336 seed=456] params: 1,070,416 | batch: 8 | accum: 1 | effective_batch: 8 | steps/epoch: 1923 | effective_steps/epoch: 1923 | CD_tokens: 3531 | start_epoch: 1
+35566.5s	75	  [CD pred=336 seed=456] Epoch   1/50 | train MSE 0.3144 | val MSE 0.2522 | lr 4.00e-05 | 954s/ep | 954s total
+38426.7s	76	  [CD pred=336 seed=456] Session budget reached before epoch 5. Checkpoint saved; next session resumes here.
+38426.7s	77	Session budget reached. Next session: new version, attach THIS version's output as an input, Run All to resume.
+38426.7s	78	
+38426.7s	79	=== CI vs CD Results -- ECL ===
+38426.7s	80	mode  pred_len  seed  test_mse  test_mae  best_epoch
+38426.7s	81	  CI        96   456  0.175262  0.260153          42
+38426.7s	82	  CD        96   456  0.188596  0.277952          13
+38426.7s	83	  CI       336   456  0.203676  0.286915          25
+38426.7s	84	Rows in results_ecl.csv: 3 (expected 4: 2 pred_lens x {CI, CD}, seed=456)
+38426.7s	85	mode  pred_len  seed  test_mse  test_mae  best_epoch
+38426.7s	86	  CI        96   456  0.175262  0.260153          42
+38426.7s	87	  CD        96   456  0.188596  0.277952          13
+38426.7s	88	  CI       336   456  0.203676  0.286915          25
+38426.7s	89	WARNING: not all runs complete -- Run All again to resume from checkpoint.
+38431.7s	90	/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+38431.7s	91	  cells[i][c] = re.sub('\\\\\|', '|', cell)
+38431.9s	92	/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+38431.9s	93	  text = re.sub(r'_', '\_', text) # Escape underscores in display text
+38432.5s	94	[NbConvertApp] Converting notebook __notebook__.ipynb to notebook
+38432.8s	95	[NbConvertApp] Writing 54594 bytes to __notebook__.ipynb
+38435.1s	96	[NbConvertApp] Converting notebook __notebook__.ipynb to html
+38436.0s	97	[NbConvertApp] Writing 419513 bytes to __results__.html
