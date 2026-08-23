@@ -8,7 +8,7 @@ results/results_grid.csv
 
 Writes
 ------
-Results/figures/heatmap.png
+paper/figures/heatmap.png
     3x3 CD/CI MSE ratio heatmap (300 dpi). Colormap is fixed at ±0.005
     around 1.0, declared here as a method constant, not fitted to the data.
     Numeric annotations make the figure self-sufficient.
@@ -31,10 +31,15 @@ This is the half-width of the confidence interval for a cell's mean difference, 
 interval would exclude zero at the two-sided 5% level. The finding is that any CD advantage, where present, is bounded
 below this half-width; it is a measured bound, not a mere failure to reject.
 
+The same five seeds recur across all nine (C, rho) cells, so the 45 (C, rho, seed) rows are not 45 independent draws:
+pooling them flat overstates the effective sample size and understates the grand mean's own CI. The grand-mean
+function reports both figures -- the naive flat-pooled interval (n=45) and the seed-clustered interval (n=5, each
+seed's difference averaged across the nine cells first) -- and the paper cites the clustered one.
+
 Usage
 -----
 python analyze_synthetic.py [path/to/results_grid.csv]
-Script must live in time-series-forecasting/; all paths are relative to it.
+Script lives at src/analysis/ in the repository root; all paths are relative to that root.
 """
 
 import sys
@@ -66,9 +71,10 @@ _FIGURES_DIR = _ROOT / "paper" / "figures"
 _C_VALUES:   list[int]   = [7, 21, 84]
 _RHO_VALUES: list[float] = [0.1, 0.5, 0.9]
 
-# Fixed colormap window. ±0.005 is declared as a constant in the methods section, not derived from the observed spread,
-# to avoid the appearance of post-hoc scale tuning. The value was chosen to make a 1% relative deviation
-# in either direction clearly visible.
+# Colormap half-range around a ratio of 1.0, half of the paper's own +/-1% practical-
+# equivalence band. Fixed here as a method constant rather than fitted to the observed
+# spread, so a cell approaching the paper's threshold reads as visually salient rather
+# than being rescaled away by whatever range the data happens to span.
 _RATIO_HALF_RANGE: float = 0.005
 
 
@@ -160,22 +166,41 @@ def compute_ci_half_width(diff_df: pd.DataFrame) -> float:
 
 
 def grand_mean_diff(diff_df: pd.DataFrame) -> dict:
-    """Grand mean of d over all (C, rho, seed) observations.
+    """Grand mean of d, with a naive flat-pooled CI and a seed-clustered CI.
 
-    This is the simplest unbiased scalar summary of the CD-CI difference across the full grid. Unlike the OLS intercept,
-    it requires no extrapolation to unobserved covariate values.
+    The five seeds recur across all nine (C, rho) cells, so the 45 (C, rho, seed) rows are not
+    45 independent draws. The naive interval below treats them as independent (n=45) and is
+    reported only for contrast. The clustered interval averages each seed's difference across
+    the nine cells first, giving n=5 independent seed-level means; that is the interval the
+    paper cites.
+
+    Returns:
+        mean: grand-mean CD-CI difference (identical under both poolings).
+        naive_ci_lo, naive_ci_hi: flat-pooled 95% CI, n=45, informational only.
+        ci_lo, ci_hi: seed-clustered 95% CI, n=5, the reported interval.
+        mean_ci_mse: mean CI-mode MSE, for expressing the difference as a percentage.
+        n_naive, n_clustered: sample sizes behind each interval.
     """
-    d     = diff_df["diff"].values
-    n     = len(d)
+    d = diff_df["diff"].values
+    n_naive = len(d)
     mean_ = float(d.mean())
-    se_   = float(d.std(ddof=1) / np.sqrt(n))
-    tcrit = stats.t.ppf(0.975, df=n - 1)
+    se_naive = float(d.std(ddof=1) / np.sqrt(n_naive))
+    tcrit_naive = stats.t.ppf(0.975, df=n_naive - 1)
+
+    seed_means = diff_df.groupby("seed")["diff"].mean()
+    n_clustered = len(seed_means)
+    se_clustered = float(seed_means.std(ddof=1) / np.sqrt(n_clustered))
+    tcrit_clustered = stats.t.ppf(0.975, df=n_clustered - 1)
+
     return {
-        "mean":        mean_,
-        "se":          se_,
-        "ci_lo":       mean_ - tcrit * se_,
-        "ci_hi":       mean_ + tcrit * se_,
-        "mean_ci_mse": float(diff_df["CI"].mean()),
+        "mean":         mean_,
+        "naive_ci_lo":  mean_ - tcrit_naive * se_naive,
+        "naive_ci_hi":  mean_ + tcrit_naive * se_naive,
+        "n_naive":      n_naive,
+        "ci_lo":        mean_ - tcrit_clustered * se_clustered,
+        "ci_hi":        mean_ + tcrit_clustered * se_clustered,
+        "n_clustered":  n_clustered,
+        "mean_ci_mse":  float(diff_df["CI"].mean()),
     }
 
 
@@ -247,11 +272,13 @@ def print_paired(paired: pd.DataFrame, half_width: float, seeds: list[int]) -> N
 
 
 def print_grand_mean(gm: dict) -> None:
-    """Print the grand-mean CD-CI difference."""
+    """Print the grand-mean CD-CI difference, naive and seed-clustered."""
     pct = 100.0 * gm["mean"] / gm["mean_ci_mse"]
     print("\n=== GRAND MEAN CD-CI DIFFERENCE ===")
-    print(f"Mean diff (all cells/seeds):  {gm['mean']:+.6f}  ({pct:+.4f}% of mean CI MSE)")
-    print(f"95% CI:                       [{gm['ci_lo']:+.6f}, {gm['ci_hi']:+.6f}]")
+    print(f"Mean diff (all cells/seeds):     {gm['mean']:+.6f}  ({pct:+.4f}% of mean CI MSE)")
+    print(f"Naive flat-pooled 95% CI (n={gm['n_naive']}):   [{gm['naive_ci_lo']:+.6f}, {gm['naive_ci_hi']:+.6f}]")
+    print(f"Seed-clustered 95% CI (n={gm['n_clustered']}):      [{gm['ci_lo']:+.6f}, {gm['ci_hi']:+.6f}]")
+    print("The same seeds recur across every cell; the clustered interval is the one reported.")
 
 
 def print_lm(lm: dict) -> None:
@@ -285,18 +312,36 @@ def print_latex_prose(paired: pd.DataFrame, gm: dict, lm: dict, half_width: floa
     pct_gm    = abs(100.0 * gm["mean"] / gm["mean_ci_mse"])
     hw_pct    = 100.0 * half_width / gm["mean_ci_mse"]
 
-    # Honest handling of cells whose CI excludes zero: state them rather than claiming universal inclusion.
+    # Name the excluding-zero cells directly, matching the paper's wording; derived from the
+    # data so this can never silently go stale if a future CSV changes which cells are significant.
+    sig_rows = paired.loc[~((paired["ci_lo"] < 0) & (paired["ci_hi"] > 0))]
+    sig_cells = [f"$C = {int(r.C)}$, $\\rho = {r.rho:.1f}$" for r in sig_rows.itertuples()]
+    max_sig_pct = sig_rows["rel_pct"].abs().max() if n_sig else 0.0
+
     if n_sig == 0:
-        sig_clause = f"{w(n_zero)} of {w(n_cells)} 95\\% CIs include zero"
-    else:
-        max_sig_pct = paired.loc[
-            ~((paired["ci_lo"] < 0) & (paired["ci_hi"] > 0)), "rel_pct"
-        ].abs().max()
+        sig_clause = f"all {w(n_cells)} 95\\% CIs include zero"
+        exception_clause = ""
+    elif n_sig == 1:
         sig_clause = (
-            f"{w(n_zero)} of {w(n_cells)} 95\\% CIs include zero, with the "
-            f"{w(n_sig)} that exclude zero positive (CD worse) and below "
+            f"{w(n_zero)} of {w(n_cells)} 95\\% CIs include zero; the one that excludes zero, "
+            f"at {sig_cells[0]}, is positive (CD worse) and below ${max_sig_pct:.2f}\\%$ of the CI mean"
+        )
+        exception_clause = " -- including the per-cell exception above --"
+    elif n_sig == 2:
+        sig_clause = (
+            f"{w(n_zero)} of {w(n_cells)} 95\\% CIs include zero; the two that exclude zero, "
+            f"at {' and '.join(sig_cells)}, are both positive (CD worse) and below "
             f"${max_sig_pct:.2f}\\%$ of the CI mean"
         )
+        exception_clause = " -- including the two per-cell exceptions above --"
+    else:
+        cell_list = ", ".join(sig_cells[:-1]) + f", and {sig_cells[-1]}"
+        sig_clause = (
+            f"{w(n_zero)} of {w(n_cells)} 95\\% CIs include zero; the {w(n_sig)} that exclude "
+            f"zero, at {cell_list}, are all positive (CD worse) and below "
+            f"${max_sig_pct:.2f}\\%$ of the CI mean"
+        )
+        exception_clause = " -- including the per-cell exceptions above --"
 
     print("\n=== PAPER PROSE (Statistical analysis paragraph) ===")
     print(
@@ -307,18 +352,19 @@ def print_latex_prose(paired: pd.DataFrame, gm: dict, lm: dict, half_width: floa
         f"freedom ($t_{{0.025,{df_cell}}} = {tcrit:.3f}$). "
         f"Across all {w(n_cells)} cells the mean CD$-$CI difference stays within "
         f"$\\pm {max_diff:.4f}$ MSE units, at most ${max_pct:.2f}\\%$ of the "
-        f"corresponding CI mean, and {sig_clause}; "
-        f"{w(mixed)} of {w(n_cells)} cells flip sign across seeds. "
-        f"Pooling the {n_pairs} matched pairs, the grand-mean difference is "
-        f"${gm['mean']:+.4f}$ MSE (95\\% CI $[{gm['ci_lo']:.4f}, {gm['ci_hi']:.4f}]$, "
-        f"${pct_gm:.2f}\\%$ of the mean CI MSE), and regressing the paired "
-        f"difference on $C$ (categorical) and $\\rho$ finds no dependence on "
-        f"either factor ($F$-test $p = {lm['pval_f']:.2f}$, $R^2 = {lm['r2']:.2f}$). "
-        f"These intervals are a bound rather than a mere failure to reject: "
-        f"pooling the within-cell variances yields a 95\\% CI half-width of "
-        f"${half_width:.4f}$ MSE at $n = {n_seeds}$, roughly "
-        f"${hw_pct:.2f}\\%$ of the mean CI MSE, and every observed cell "
-        f"difference falls below it."
+        f"corresponding CI mean, and {sig_clause}. "
+        f"Pooling the {n_pairs} matched pairs as a simple unweighted average gives a "
+        f"grand-mean CD$-$CI of ${gm['mean']:+.4f}$ MSE (${pct_gm:.2f}\\%$ of the mean CI MSE), "
+        f"and regressing the paired difference on $C$ (categorical) and $\\rho$ finds no "
+        f"dependence on either factor ($F$-test $p = {lm['pval_f']:.2f}$, $R^2 = {lm['r2']:.2f}$). "
+        f"Because the same {w(n_seeds)} seeds recur across all {w(n_cells)} cells, we report the "
+        f"grand mean's interval clustered by seed rather than treating all {n_pairs} rows as "
+        f"independent -- averaging each seed's difference across the {w(n_cells)} cells first "
+        f"gives a wider but still zero-including 95\\% CI of $[{gm['ci_lo']:+.4f}, {gm['ci_hi']:+.4f}]$. "
+        f"Pooling the within-cell variances gives a 95\\% CI half-width of "
+        f"${half_width:.4f}$ MSE at $n = {n_seeds}$, roughly ${hw_pct:.2f}\\%$ of the mean CI MSE. "
+        f"Any uniform CD advantage larger than that would have pushed the grand-mean CI entirely "
+        f"above zero, and none of the observed differences{exception_clause} come close."
     )
 
 

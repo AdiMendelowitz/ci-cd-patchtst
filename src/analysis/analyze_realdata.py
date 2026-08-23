@@ -316,6 +316,82 @@ def etth1_budget_table(df: pd.DataFrame) -> pd.DataFrame:
     return merged.sort_values("pred_len").reset_index(drop=True)
 
 
+def etth1_pooled_diff(df: pd.DataFrame) -> dict:
+    """Pooled CD-CI difference across all four horizons, clustered by seed.
+
+    The same five seeds appear at every horizon, so naively pooling the 20
+    (horizon, seed) pairs as independent draws understates the interval width.
+    This averages each seed's CD-CI difference across the four horizons first,
+    giving five genuinely independent units, then takes a paired t-CI over
+    those -- the seed, not the (horizon, seed) pair, is the independent unit.
+
+    Args:
+        df: Raw long-format ETTh1 results (same input as etth1_paired_diff).
+
+    Returns:
+        Dict with mean, se, ci_lo, ci_hi, base_mean, n (seeds, not rows), rel_pct.
+
+    Raises:
+        ValueError: If any seed lacks a complete four-horizon CD/CI pair,
+            since a silent partial average would change what "pooled" means
+            without any signal that the input was incomplete.
+    """
+    pivot = (
+        df[df["mode"].isin(["CI", "CD"])]
+        .pivot_table(index=["pred_len", "seed"], columns="mode", values="test_mse")
+        .dropna()
+        .reset_index()
+    )
+    pivot["diff"] = pivot["CD"] - pivot["CI"]
+    counts = pivot.groupby("seed").size()
+    incomplete = counts[counts != 4]
+    if not incomplete.empty:
+        raise ValueError(
+            f"Expected 4 horizons per seed with both CI and CD present; "
+            f"seed(s) with a different count: {incomplete.to_dict()}"
+        )
+    per_seed = pivot.groupby("seed")["diff"].mean()
+    n = len(per_seed)
+    mean_d = float(per_seed.mean())
+    se = float(per_seed.std(ddof=1) / np.sqrt(n))
+    tcrit = float(stats.t.ppf(0.975, df=n - 1))
+    base_mean = float(pivot["CI"].mean())
+    return {
+        "mean": mean_d, "se": se,
+        "ci_lo": mean_d - tcrit * se, "ci_hi": mean_d + tcrit * se,
+        "base_mean": base_mean, "n": n,
+        "rel_pct": 100.0 * mean_d / base_mean,
+    }
+
+
+# Oracle values frozen against the committed results_etth1.csv (5 seeds, 4
+# horizons). Clustered by seed per etth1_pooled_diff's docstring. mean/ci_lo/
+# ci_hi to 4dp, rel_pct to 2dp.
+_ORACLE_ETTH1_POOLED: dict[str, float] = {
+    "mean": 0.0147, "ci_lo": 0.0000, "ci_hi": 0.0293, "rel_pct": 2.58,
+}
+
+
+def oracle_check_pooled(pooled: dict) -> bool:
+    """Compare the freshly-computed pooled figures against the frozen oracle.
+
+    Args:
+        pooled: Output of etth1_pooled_diff.
+
+    Returns:
+        True if mean, ci_lo, ci_hi, and rel_pct all match the pinned oracle
+        at the stated precision.
+    """
+    got = {
+        "mean": round(pooled["mean"], 4), "ci_lo": round(pooled["ci_lo"], 4),
+        "ci_hi": round(pooled["ci_hi"], 4), "rel_pct": round(pooled["rel_pct"], 2),
+    }
+    ok = got == _ORACLE_ETTH1_POOLED
+    print(f"  [{'PASS' if ok else 'FAIL'}] pooled ETTh1: {got}"
+          + ("" if ok else f" != oracle {_ORACLE_ETTH1_POOLED}"))
+    return ok
+
+
 # ── Console output ────────────────────────────────────────────────────────────
 
 
@@ -377,6 +453,27 @@ def print_etth1_summary(
             f"Budget matched: warmup_epochs=10 and batch_size=32 for both modes. "
             f"steps_per_epoch ratio is {ratio_msg}."
         )
+
+
+def print_etth1_pooled(pooled: dict) -> bool:
+    """Print the seed-clustered pooled CD-CI summary and its oracle check.
+
+    Args:
+        pooled: Output of etth1_pooled_diff.
+
+    Returns:
+        True if the printed figures match the pinned oracle, else False --
+        callers use this to gate the process exit code.
+    """
+    print("\n=== ETTh1: pooled CD-CI across all four horizons (clustered by seed, n=5) ===")
+    print(
+        f"Mean {pooled['mean']:+.4f} MSE ({pooled['rel_pct']:+.2f}% of CI mean), "
+        f"95% CI [{pooled['ci_lo']:+.4f}, {pooled['ci_hi']:+.4f}]"
+    )
+    print("\n=== ORACLE CHECK ===")
+    passed = oracle_check_pooled(pooled)
+    print(f"RESULT: {'PASS' if passed else 'FAIL'}")
+    return passed
 
 
 def print_ecl_summary(ecl: pd.DataFrame) -> None:
@@ -629,7 +726,14 @@ def plot_real_data(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
-def main() -> None:
+def main() -> int:
+    """Run the full ETTh1/ECL/correlation analysis and write the figure.
+
+    Returns:
+        0 if the pooled-ETTh1 oracle check passes, 1 otherwise. Structural
+        and schema failures elsewhere (bad CSVs, oracle drift in the
+        correlation summary) raise directly rather than returning non-zero.
+    """
     etth1_path = Path(sys.argv[1]) if len(sys.argv) > 1 else _ETTH1_PATH
     etth1 = load_etth1(etth1_path)
     ecl = load_ecl(_ECL_PATH)
@@ -646,13 +750,16 @@ def main() -> None:
     ecl_seeds = sorted(int(s) for s in ecl["seed"].unique()) if ecl is not None else None
 
     print_etth1_summary(ratio, paired, budget, etth1_seeds)
+    pooled = etth1_pooled_diff(etth1)
+    passed = print_etth1_pooled(pooled)
     if ecl is not None:
         print_ecl_summary(ecl)
     if corr is not None:
         print_corr_summary(corr, lag)
 
     plot_real_data(etth1_agg, ecl_agg, ecl_seeds, _FIGURES_DIR / "real_data.png")
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
