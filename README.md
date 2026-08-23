@@ -89,9 +89,6 @@ ci-cd-patchtst/
                               2026-08-04 (see Notebooks)
   results/                    committed result CSVs and run logs (see inventory)
     Revision/                 revision-era result CSVs
-  docs/                       internal working documents (frozen snapshots;
-                              local copies are canonical; excluded from the
-                              anonymised distribution)
 ```
 
 The cross-variate head is the class `PatchTST_CD_Head` inside `src/models.py`.
