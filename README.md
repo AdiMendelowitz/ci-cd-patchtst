@@ -18,17 +18,19 @@ VAR(1) process with lag-1 coupling of controllable strength, and a
 block-covariance family. Across every tested cell, neither mode shows a
 forecast-accuracy gap that clears a pre-registered 1% relative-MSE band once each
 model is selected fairly. What does not equalise is cost. The flattened-token CD
-formulation needs smaller feasible batches and far more gradient steps per epoch,
-its batch size collapses to one at 84 variates, and at 321 variates (ECL) it does
-not finish under a single-T4 budget while CI trains stably. On accuracy per unit
-compute, CI is the better default.
+formulation needs smaller feasible batches and far more gradient steps per
+epoch; under the original materialised-attention environment its batch size
+collapses to one at 84 variates, and at 321 variates (ECL) a CD epoch costs
+roughly 956 s against roughly 143 s for CI at the same batch size, about 4.5
+GPU-hours for the completed H=336 run. On accuracy per unit compute, CI is the
+better default.
 
 ## Key result
 
 On the AR(1) grid the grand-mean CD minus CI difference is +0.0013 MSE over five
-seeds, with a 95% confidence interval of [-0.0002, +0.0028] (+0.13% of the CI
-mean, inside the pre-registered 1% band). Separately, the per-cell 95%
-detection half-width is 0.0063 MSE, about 0.63% of the CI mean: the smallest
+seeds, with a seed-clustered 95% confidence interval of [-0.0023, +0.0048]
+(+0.13% of the CI mean, inside the pre-registered 1% band). Separately, the per-cell 95%
+detection half-width is 0.0063 MSE, about 0.62% of the CI mean: the smallest
 per-cell mean difference whose interval would exclude zero, so any per-cell CD
 advantage, where present, is bounded below that half-width — a measured bound,
 not a mere failure to reject. A fair-protocol robustness suite,
@@ -57,33 +59,36 @@ ci-cd-patchtst/
     models.py                 PatchTST CI and CD modes, the PatchTST_CD_Head
                               cross-variate head, TrueDLinear, and build_model
     models_cd_block.py        block-wise cross-variate attention CD variant
-                              (revision, B1)
+                              (revision)
     generators/
       generate_leader_follower.py   leader-follower VAR(1) generator
       generate_block_cov.py         block-covariance AR(1) generator
     analysis/
-      analyze_synthetic.py          Table 3, Figure 1, Section 3
-      analyze_realdata.py           Table 4, Table 5, Figure 2
-      analyze_leader_follower.py    Table 6, Section 4.3 slope
-      analyze_boundary.py           Table 7, Figure 3, Section 4.4
-      analyze_overtrain.py          Figure 4, Section 5.1
-      analyze_equal_compute.py      Section 5.2
-      analyze_cd_head.py            Section 5.3
-      analyze_block_cov.py          Section 5.4
-      analyze_equiv_table.py        Table 8
-      validate_granger.py           Section 2.1 Granger non-causality
-      partition_etth1_coupling.py   ETTh1 coupling-partition scoring (revision, B4)
+      analyze_synthetic.py          AR(1) grid table and heatmap
+      analyze_realdata.py           ETTh1 and ECL tables and figure
+      analyze_leader_follower.py    leader-follower gamma-sweep table and slope
+      analyze_boundary.py           boundary patch-size table and heatmap
+      analyze_overtrain.py          selection-rule diagnostic and trajectories
+      analyze_equal_compute.py      matched-compute control
+      analyze_cd_head.py            cross-variate-head control
+      analyze_block_cov.py          block-covariance family
+      analyze_block_attention.py    block-wise attention three-arm ablation
+      analyze_etth1_subgroup.py     ETTh1 coupling-subgroup contrast
+      analyze_equiv_table.py        practical-equivalence summary table
+      derive_theoretical_bounds.py  closed-form CI/CD forecast-error ceilings
+      derive_vram_bound.py          attention-memory bound derivation
+      validate_granger.py           Granger non-causality battery
+      partition_etth1_coupling.py   ETTh1 coupling-partition scoring (revision)
       paired_stats.py               shared paired-difference library
     tests/
       test_experiments.py
       test_cd_block.py
       conftest.py
-  notebooks/                  training notebooks (Kaggle T4); see note below
+  notebooks/                  training notebooks (Kaggle T4); see Notebooks
     original/                 original boundary training notebooks, retrieved
                               2026-08-04 (see Notebooks)
-  results/                    committed result CSVs (see inventory below)
-    Revision/                 revision-era result CSVs (in progress; see
-                              inventory note below)
+  results/                    committed result CSVs and run logs (see inventory)
+    Revision/                 revision-era result CSVs
   docs/                       internal working documents (frozen snapshots;
                               local copies are canonical; excluded from the
                               anonymised distribution)
@@ -144,51 +149,63 @@ Every table and figure is recomputed from a committed CSV in `results/` by one
 analysis script. Run each from the repository root. The scripts carry the numbers
 and print them on each run, so this README does not restate result values that
 could drift from the paper. Figure-producing scripts write their PNG into
-`paper/figures/`.
+`paper/figures/`. Paper-position references below name the content rather than
+table numbers, which the paper's revision renumbered; each script's own header
+states the exact table/figure label it feeds.
 
 | Paper claim | Command | Reads | Prints / writes |
 | --- | --- | --- | --- |
-| Table 3, Figure 1, Section 3 | `python src/analysis/analyze_synthetic.py` | `results/results_grid.csv` | per-cell and grand-mean CD-CI, regression; writes `paper/figures/heatmap.png` |
-| Table 4, Table 5, Figure 2 | `python src/analysis/analyze_realdata.py` | `results/results_etth1.csv`, `results/results_ecl.csv` | ETTh1 per-horizon paired CD-CI, ECL CI-only summary; writes `paper/figures/real_data.png` |
-| Table 6, Section 4.3 slope | `python src/analysis/analyze_leader_follower.py` | `results/results_leader_follower.csv` | per-gamma CI, CD, and DLinear means and the gamma slope, with an oracle self-check |
-| Table 7, Figure 3, Section 4.4 | `python src/analysis/analyze_boundary.py` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv` | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
-| Figure 4, Section 5.1 | `python src/analysis/analyze_overtrain.py` | `results/results_overtrain_summary.csv`, `results/results_overtrain_diag.csv` | selection-rule effect sizes; writes `paper/figures/diag_overlay_clean.png` |
-| Section 5.2 | `python src/analysis/analyze_equal_compute.py` | `results/results_equal_compute.csv` | matched-budget CD-CI with a validity gate on the update budget |
-| Section 5.3 | `python src/analysis/analyze_cd_head.py` | `results/results_cd_head.csv` | cross-variate-head contrasts against CI and CD |
-| Section 5.4 | `python src/analysis/analyze_block_cov.py` | `results/results_block_cov.csv` | block-covariance per-cell CD-CI and the rho_in slope |
-| Table 8 | `python src/analysis/analyze_equiv_table.py` | `results/results_grid.csv`, `results_cd_head.csv`, `results_overtrain_summary.csv`, `results_equal_compute.csv`, `results_block_cov.csv` | recomputes all twelve equivalence rows; writes `results/equiv_summary.csv` |
-| Section 2.1 Granger | `python src/analysis/validate_granger.py` | generates data internally | Granger non-causality battery (console only) |
+| AR(1) grid table and heatmap | `python src/analysis/analyze_synthetic.py` | `results/results_grid.csv` | per-cell and grand-mean CD-CI, regression; writes `paper/figures/heatmap.png` |
+| ETTh1 and ECL tables and figure | `python src/analysis/analyze_realdata.py` | `results/results_etth1.csv`, `results/results_ecl.csv` | ETTh1 per-horizon paired CD-CI; ECL CI/CD summary; writes `paper/figures/real_data.png` |
+| ETTh1 coupling-subgroup contrast | `python src/analysis/analyze_etth1_subgroup.py` | `results/etth1_coupling_partition.csv`, matched-budget ETTh1 window results | high- versus low-coupling subgroup CD-CI with oracle self-check |
+| Leader-follower gamma sweep and slope | `python src/analysis/analyze_leader_follower.py` | `results/results_leader_follower.csv` | per-gamma CI, CD, and DLinear means and the gamma slope, with an oracle self-check |
+| Boundary patch-size table and heatmap | `python src/analysis/analyze_boundary.py` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv` | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
+| Selection-rule diagnostic and trajectories | `python src/analysis/analyze_overtrain.py` | `results/results_overtrain_summary.csv`, `results/results_overtrain_diag.csv` | selection-rule effect sizes; writes `paper/figures/diag_overlay_clean.png` |
+| Matched-compute control | `python src/analysis/analyze_equal_compute.py` | `results/results_equal_compute.csv` | matched-budget CD-CI with a validity gate on the update budget |
+| Cross-variate-head control | `python src/analysis/analyze_cd_head.py` | `results/results_cd_head.csv` | cross-variate-head contrasts against CI and CD |
+| Block-covariance family | `python src/analysis/analyze_block_cov.py` | `results/results_block_cov.csv` | block-covariance per-cell CD-CI and the rho_in slope |
+| Block-wise attention ablation | `python src/analysis/analyze_block_attention.py` | block-attention CSVs under `results/Revision/` | three-arm CI/CD/CD_Block contrasts and the gradient-norm and participation-ratio diagnostics |
+| Practical-equivalence summary | `python src/analysis/analyze_equiv_table.py` | `results/results_grid.csv`, `results_cd_head.csv`, `results_overtrain_summary.csv`, `results_equal_compute.csv`, `results_block_cov.csv` | recomputes all twelve equivalence rows with mean and CI oracle checks; writes `results/equiv_summary.csv` |
+| Theoretical forecast-error ceilings | `python src/analysis/derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; writes `results/theoretical_bounds.csv` |
+| Granger non-causality | `python src/analysis/validate_granger.py` | generates data internally | Granger non-causality battery (console only) |
 
 ## Results CSV inventory
 
-`results/` holds the twelve analysis-input CSVs below, each the committed
-input to one analysis script (`equiv_summary.csv` is also written by
-`analyze_equiv_table.py`), plus the revision-era files noted after the list:
+`results/` holds the analysis-input CSVs below, each the committed input to one
+analysis script (`equiv_summary.csv` and `theoretical_bounds.csv` are script
+outputs, committed for reference), plus revision-era files noted after the
+list:
 
-- `results_grid.csv` -- AR(1) grid (Table 3, Figure 1, Section 3)
-- `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL (Tables 4 and 5, Figure 2)
-- `results_leader_follower.csv` -- leader-follower P=16 sweep (Table 6, Section 4.3)
-- `results_boundary.csv`, `results_boundary_p4_ci.csv` -- boundary patch-size sweep (Table 7, Figure 3, Section 4.4)
-- `results_overtrain_summary.csv`, `results_overtrain_diag.csv` -- overtraining and selection diagnostic (Figure 4, Section 5.1)
-- `results_equal_compute.csv` -- matched-compute control (Section 5.2)
-- `results_cd_head.csv` -- cross-variate-head control (Section 5.3)
-- `results_block_cov.csv` -- block-covariance family (Section 5.4)
-- `equiv_summary.csv` -- practical-equivalence summary (Table 8)
+- `results_grid.csv` -- AR(1) grid
+- `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL
+- `results_leader_follower.csv` -- leader-follower P=16 sweep
+- `results_boundary.csv`, `results_boundary_p4_ci.csv` -- boundary patch-size sweep
+- `results_overtrain_summary.csv`, `results_overtrain_diag.csv` -- overtraining and selection diagnostic
+- `results_equal_compute.csv` -- matched-compute control
+- `results_cd_head.csv` -- cross-variate-head control
+- `results_block_cov.csv` -- block-covariance family
+- `equiv_summary.csv` -- practical-equivalence summary
+- `theoretical_bounds.csv` -- closed-form CI/CD forecast-error ceilings
+- `etth1_coupling_partition.csv` -- ETTh1 window coupling scores
 
-Revision-era result CSVs live under `results/Revision/` (currently the
-block-attention ablation pair), and `results/etth1_coupling_partition.csv`
-sits alongside the twelve above; they belong to the in-progress revision and
-their provenance is maintained internally.
+Revision-era result CSVs live under `results/Revision/` (block-attention
+ablation, matched-budget ETTh1 rerun, and the C=84 block-attention grid cell).
+`results/` also carries the stdout logs of the completed ECL CI/CD training
+sessions (`ecl_ci_cd_train_resumable_v*_stdout.txt`) as provenance for the
+paper's per-epoch cost figures.
 
 ## Notebooks
 
 The `notebooks/` directory holds the training notebooks, each run on a Kaggle
-T4 GPU, that produced the result CSVs: leader-follower, ETTh1, ECL, DLinear,
-cross-variate head, equal compute, block covariance, and (revision-era) the
-block-wise cross-variate attention ablation. The AR(1) grid and the boundary
-patch-size sweep are not among them; the boundary sweep's original notebooks
-are committed separately under `notebooks/original/` (see Reproducing from
-scratch), and the AR(1) grid remains CSV-only.
+T4 GPU, that produced the result CSVs: leader-follower, ETTh1 (original and
+matched-budget rerun), ECL (CI/CD resumable), DLinear, cross-variate head,
+equal compute, block covariance, the block-wise cross-variate attention
+ablation (including its single-cell C=84 AR(1)-grid variant,
+`train_grid_c84_block_attn.ipynb`), and the boundary P=4 gamma-sweep slices
+with their config files. The AR(1) grid's own training notebook is not among
+them and that experiment remains CSV-only; the boundary sweep's original
+notebooks are committed separately under `notebooks/original/` (see
+Reproducing from scratch).
 
 ## Reproducing from scratch
 
@@ -203,10 +220,11 @@ its committed CSVs but cannot be retrained from this repository. The boundary
 patch-size sweep's original training notebooks were retrieved on 2026-08-04
 from the Kaggle environment in which they ran and are committed byte-identical
 under `notebooks/original/` (`train_boundary_*.ipynb`); they are
-Kaggle-environment notebooks (T4, `/kaggle/working` paths). They retrain the
-boundary grid (P in {2, 8, 16}) at n=5 and the P=4 CI cells at n=3 on that
-platform; the notebook version that extended P=4 CI to n=5 is pending retrieval
-from the Kaggle version history (see `notebooks/original/README.md`).
+Kaggle-environment notebooks (T4, `/kaggle/working` paths) covering the
+original grid (P in {2, 8, 16}) at n=5 and the original P=4 CI cells at n=3.
+The full P=4 extension (CD and CI, n=5, across the gamma sweep) was trained by
+the revision-era gamma-slice notebooks committed under `notebooks/`, which
+carry their own per-epoch checkpoint/resume protocol.
 The boundary notebooks define their own data generation and windowing, which
 differ from the other engines under `notebooks/`; `notebooks/original/README.md`
 records each file's role and SHA256 and the shared protocol. The leader-follower and block-covariance generators under
