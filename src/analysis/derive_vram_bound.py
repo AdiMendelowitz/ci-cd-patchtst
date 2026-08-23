@@ -1,4 +1,4 @@
-"""Materialised-attention VRAM bound for PatchTST-CD on ECL, worked arithmetic.
+﻿"""Materialised-attention VRAM bound for PatchTST-CD on ECL, worked arithmetic.
 
 Reads nothing: every number is derived analytically from committed
 architecture constants (C, seq_len, patch_size, stride, num_heads,
@@ -29,7 +29,7 @@ Cross-check against measured anchors
 -------------------------------------
 Two real Stage-0 probe measurements exist for ecl_cd/ecl_cd_block under
 the current (fused-attention) PyTorch environment on a real T4
-(dryrun_stage0.py, account mendelowitzadi, block-attn-dryrun dataset,
+(dryrun_stage0.py, account REDACTED, block-attn-dryrun dataset,
 12 Aug run -- corrected architecture: seq_len=96, d_model=128, 16 heads,
 matching Table 1). A first probe run (03 Aug) measured 11.67 GiB / OOM at
 this same nominal token count, but that run silently used the synthetic-
@@ -75,7 +75,7 @@ BYTES_PER_ELEMENT = 2  # FP16
 GIB = 1024 ** 3
 
 # Measured 12 Aug anchors, corrected (real ECL) architecture, current
-# (fused-attention) environment, single T4 (dryrun_stage0.py; ledger §13).
+# (fused-attention) environment, single T4 (dryrun_stage0.py; ledger Â§13).
 MEASURED_ANCHORS = {
     128: {"peak_gib": 8.134, "sec_per_epoch": 892.9, "oom": False},
     8: {"peak_gib": 0.534, "sec_per_epoch": 894.9, "oom": False},
