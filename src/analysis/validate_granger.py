@@ -286,7 +286,7 @@ def run_validation(gamma: float, rho: float, seed: int) -> None:
             f"{n_correct}/{n_total} correct  |  {n_sig} significant"
         )
         for _, r in grp.iterrows():
-            marker = "\u2713" if r["correct"] else "\u2717"
+            marker = "ok" if r["correct"] else "FP"
             print(
                 f"  {marker}  {r['cause']:>2} -> {r['effect']:>2}  "
                 f"p={r['pvalue']:.4f}  {'*' if r['significant'] else ' '}"
@@ -303,7 +303,7 @@ def run_validation(gamma: float, rho: float, seed: int) -> None:
 
     n_total = len(results)
     n_correct = int(results["correct"].sum())
-    print(f"\n{'─'*40}")
+    print(f"\n{'-'*40}")
     print(f"Overall: {n_correct}/{n_total} tests correct  [{overall}]")
 
     if overall == "EXPECTED":

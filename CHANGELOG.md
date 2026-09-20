@@ -4,6 +4,13 @@ Releases are annotated git tags. `v1.0-tmlr` is the tag cited in the paper and
 is not moved; every later change to the public repository is listed here and
 released under a new tag.
 
+## v1.1.1-tmlr (2026-09-20)
+
+- `src/reproduce_all.py` runs its child scripts with UTF-8 stdout, and prints
+  a failed command's output even under `--quiet`. Under `v1.1-tmlr` the
+  Granger row failed on Windows because `validate_granger.py` printed
+  non-ASCII markers into a code-page pipe; those markers are now ASCII.
+
 ## v1.1-tmlr (2026-09-20)
 
 Repository hardening after an independent reproduction audit of `v1.0-tmlr`.
