@@ -4,6 +4,14 @@ Releases are annotated git tags. `v1.0-tmlr` is the tag cited in the paper and
 is not moved; every later change to the public repository is listed here and
 released under a new tag.
 
+## v1.2.2-tmlr (2026-09-20)
+
+- `v1.0-tmlr`, the tag the paper cites, is now archived on Zenodo as an
+  earlier version of the same record (10.5281/zenodo.22860170), so the
+  archive covers every citable state of the repository, not only
+  `v1.2-tmlr` onwards. `CITATION.cff` and the README list all three DOIs;
+  cite the concept DOI (10.5281/zenodo.22859870) alongside the tag.
+
 ## v1.2.1-tmlr (2026-09-20)
 
 - Releases are archived on Zenodo from `v1.2-tmlr` onwards. `CITATION.cff`
