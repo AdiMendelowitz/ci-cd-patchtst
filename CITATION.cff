@@ -5,8 +5,16 @@ authors:
   - family-names: Mendelowitz
     given-names: Adi
     email: adimendelowitz@gmail.com
-version: v1.2-tmlr
+version: v1.2.1-tmlr
 date-released: 2026-09-20
+doi: 10.5281/zenodo.22859870
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22859870
+    description: Concept DOI; resolves to the latest archived release on Zenodo
+  - type: doi
+    value: 10.5281/zenodo.22859871
+    description: Zenodo archive of release v1.2-tmlr
 repository-code: https://github.com/AdiMendelowitz/ci-cd-patchtst
 license: MIT
 preferred-citation:

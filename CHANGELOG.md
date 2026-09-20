@@ -4,6 +4,12 @@ Releases are annotated git tags. `v1.0-tmlr` is the tag cited in the paper and
 is not moved; every later change to the public repository is listed here and
 released under a new tag.
 
+## v1.2.1-tmlr (2026-09-20)
+
+- Releases are archived on Zenodo from `v1.2-tmlr` onwards. `CITATION.cff`
+  carries the concept DOI 10.5281/zenodo.22859870 and the README shows the
+  DOI badge.
+
 ## v1.2-tmlr (2026-09-20)
 
 Verification now covers every input and every analysis script.
