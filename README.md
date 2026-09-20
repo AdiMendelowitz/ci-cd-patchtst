@@ -4,7 +4,7 @@ Code, data, and paper for a controlled study of channel-independent (CI) versus
 channel-dependent (CD) PatchTST on multivariate time-series forecasting.
 
 Published in Transactions on Machine Learning Research (2026). Reviewed on
-OpenReview: https://openreview.net/forum?id=aiUZ2y8UNI. See Citation below.
+OpenReview: https://openreview.net/forum?id=aiUZ2y8UNl. See Citation below.
 
 ## Summary
 
@@ -263,7 +263,7 @@ records each file's role and SHA256 and the shared protocol. The leader-follower
   author  = {Mendelowitz, Adi},
   journal = {Transactions on Machine Learning Research},
   year    = {2026},
-  url     = {https://openreview.net/forum?id=aiUZ2y8UNI}
+  url     = {https://openreview.net/forum?id=aiUZ2y8UNl}
 }
 ```
 
