@@ -6,6 +6,8 @@ channel-dependent (CD) PatchTST on multivariate time-series forecasting.
 Published in Transactions on Machine Learning Research (2026). Reviewed on
 OpenReview: <https://openreview.net/forum?id=aiUZ2y8UNl>. See Citation below.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22859870.svg)](https://doi.org/10.5281/zenodo.22859870)
+
 ## Summary
 
 Comparisons of CI and CD forecasting models are usually run on observational
@@ -335,9 +337,12 @@ records each file's role and SHA256 and the shared protocol. The three generator
 ## Citation
 
 `CITATION.cff` at the repository root carries the same reference for GitHub's
-"Cite this repository" button. The paper cites release `v1.0-tmlr`, the state
-of the repository at camera-ready submission; later releases are listed in
-`CHANGELOG.md` and never move that tag.
+"Cite this repository" button. Releases from `v1.2-tmlr` onwards are archived
+on Zenodo; the concept DOI <https://doi.org/10.5281/zenodo.22859870> always
+resolves to the newest archived release and each release also has its own
+DOI (`v1.2-tmlr`: 10.5281/zenodo.22859871). The paper cites release
+`v1.0-tmlr`, the state of the repository at camera-ready submission; later
+releases are listed in `CHANGELOG.md` and never move that tag.
 
 ```
 @article{mendelowitz2026equalaccuracy,
