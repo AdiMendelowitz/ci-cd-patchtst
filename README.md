@@ -53,6 +53,8 @@ coupling strength.
 ```
 ci-cd-patchtst/
   README.md
+  mendelowitz2026equalaccuracy.pdf
+                              the published paper (camera-ready PDF)
   LICENSE
   pyproject.toml              project metadata and dependencies (source of truth)
   uv.lock                     exact pinned resolution (uv)
