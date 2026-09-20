@@ -1,5 +1,5 @@
 P=2 probe: n_patches=511  C*N=10731  batch=64  steps_per_epoch=209
   CD: peak  6.17 GiB alloc /  6.61 GiB reserved [FITS]  |   18775 ms/step  |  1.09 h/epoch  |  ~ 32.7 h/seed (best-epoch ~30),  54.5 h ceiling
   CI: peak  6.17 GiB alloc /  6.63 GiB reserved [FITS]  |    1258 ms/step  |  0.07 h/epoch  |  ~  2.2 h/seed (best-epoch ~30),   3.7 h ceiling
-  run list (5 CD + 5 CI, gamma 0.9): ~174.4 h typical, 290.7 h ceiling (per-account weekly quota is 30 h — trim seeds or split across accounts if this exceeds it).
+  run list (5 CD + 5 CI, gamma 0.9): ~174.4 h typical, 290.7 h ceiling (per-slice weekly quota is 30 h — trim seeds or split across slices if this exceeds it).
   note: per-step is compute-only; real epochs add data-loading and a per-epoch validation pass, so treat these hours as a lower bound.
