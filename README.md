@@ -103,8 +103,9 @@ ci-cd-patchtst/
   notebooks/                  training notebooks (Kaggle T4); see Notebooks
     original/                 original boundary training notebooks, retrieved
                               2026-08-04 (see Notebooks)
-  results/                    committed result CSVs and run logs (see inventory)
-    Revision/                 revision-era result CSVs (see inventory)
+  results/                    committed result CSVs (see inventory)
+    logs/                     stdout logs of the ECL training sessions and the
+                              P=2 feasibility probe
   src/probes/                 T4 feasibility probes (P=2 boundary, ECL stage-0,
                               block-attention dry run); measurement only
 ```
@@ -174,25 +175,25 @@ states the exact table/figure label it feeds.
 | ETTh1 and ECL tables and figure | `python src/analysis/analyze_realdata.py` | `results/results_etth1.csv`, `results/results_ecl.csv` | ETTh1 per-horizon paired CD-CI; ECL CI/CD summary; writes `paper/figures/real_data.png` |
 | ETTh1 coupling-subgroup contrast | `python src/analysis/analyze_etth1_subgroup.py` | `results/etth1_coupling_partition.csv`, matched-budget ETTh1 window results | high- versus low-coupling subgroup CD-CI with oracle self-check |
 | Leader-follower gamma sweep and slope | `python src/analysis/analyze_leader_follower.py` | `results/results_leader_follower.csv` | per-gamma CI, CD, and DLinear means and the gamma slope, with an oracle self-check |
-| Boundary patch-size table and heatmap | `python src/analysis/analyze_boundary.py results/results_boundary_p4_ci.csv results/results_boundary.csv results/Revision/train_boundary_p4/results_boundary_p4_complete.csv results/Revision/train_boundary_p4/results_boundary_p4_gamma0_complete.csv results/Revision/train_boundary_p4/results_boundary_p4_gamma03_complete.csv results/Revision/train_boundary_p4/results_boundary_p4_gamma06_complete.csv` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv`, plus the four P=4 `*_complete.csv` files (without them the P=4 row renders as not run) | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
+| Boundary patch-size table and heatmap | `python src/analysis/analyze_boundary.py results/results_boundary_p4_ci.csv results/results_boundary.csv results/results_boundary_p4_gamma0_complete.csv results/results_boundary_p4_gamma03_complete.csv results/results_boundary_p4_gamma06_complete.csv results/results_boundary_p4_gamma09_complete.csv` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv`, plus the four P=4 `*_complete.csv` files (without them the P=4 row renders as not run) | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
 | Selection-rule diagnostic and trajectories | `python src/analysis/analyze_overtrain.py` | `results/results_overtrain_summary.csv`, `results/results_overtrain_diag.csv` | selection-rule effect sizes; writes `paper/figures/diag_overlay_clean.png` |
 | Matched-compute control | `python src/analysis/analyze_equal_compute.py` | `results/results_equal_compute.csv` | matched-budget CD-CI with a validity gate on the update budget |
 | Cross-variate-head control | `python src/analysis/analyze_cd_head.py` | `results/results_cd_head.csv` | cross-variate-head contrasts against CI and CD |
 | Block-covariance family | `python src/analysis/analyze_block_cov.py` | `results/results_block_cov.csv` | block-covariance per-cell CD-CI and the rho_in slope |
-| Block-wise attention ablation | `python src/analysis/analyze_block_attention.py` | `results/Revision/train_block_attention/*.csv` | three-arm CI/CD/CD_Block contrasts and the gradient-norm and participation-ratio diagnostics |
-| P=4 boundary cells (all four gamma) | `python src/analysis/analyze_boundary_p4.py results/Revision/train_boundary_p4/results_boundary_p4_complete.csv results/Revision/train_boundary_p4/results_boundary_p4_gamma0_complete.csv results/Revision/train_boundary_p4/results_boundary_p4_gamma03_complete.csv results/Revision/train_boundary_p4/results_boundary_p4_gamma06_complete.csv --ci-ref results/results_boundary_p4_ci.csv` | the four `*_complete.csv` files under `results/Revision/train_boundary_p4/` | per-gamma paired CD-CI at P=4 with oracle self-check |
-| C=84 three-arm block-attention cell | `python src/analysis/analyze_boundary_c84.py` | `results/Revision/train_grid_c84_block_attn/results_grid_C84_block_attn.csv` | CI/CD/CD_Block contrasts at C=84, rho=0.5, with oracle self-check |
+| Block-wise attention ablation | `python src/analysis/analyze_block_attention.py` | `results/results_block_attention.csv`, `results/diag_b5_gamma06.csv` | three-arm CI/CD/CD_Block contrasts and the gradient-norm and participation-ratio diagnostics |
+| P=4 boundary cells (all four gamma) | `python src/analysis/analyze_boundary_p4.py` | `results/results_boundary_p4_gamma{0,03,06,09}_complete.csv`, `results/results_boundary_p4_ci.csv` | per-gamma paired CD-CI at P=4 with oracle self-check |
+| C=84 three-arm block-attention cell | `python src/analysis/analyze_boundary_c84.py` | `results/results_grid_C84_block_attn.csv` | CI/CD/CD_Block contrasts at C=84, rho=0.5, with oracle self-check |
 | Compute-versus-accuracy figure | `python src/analysis/make_compute_accuracy_fig.py --outdir paper/figures` | `results/results_leader_follower.csv`, `results/results_grid.csv` | writes `paper/figures/compute_accuracy.png` |
 | Attention-memory bound and measured peak | `python src/analysis/derive_vram_bound.py` | architecture constants and the measured peak allocations recorded in the script | materialised-attention bound at ECL scale against the measured peak; writes `results/vram_bound.csv` |
 | Practical-equivalence summary | `python src/analysis/analyze_equiv_table.py` | `results/results_grid.csv`, `results_cd_head.csv`, `results_overtrain_summary.csv`, `results_equal_compute.csv`, `results_block_cov.csv` | recomputes all twelve equivalence rows with mean and CI oracle checks; writes `results/equiv_summary.csv` |
-| Theoretical forecast-error ceilings | `python src/analysis/derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; compares against the committed `results/Revision/theoretical_bounds.csv` and writes it only if absent |
+| Theoretical forecast-error ceilings | `python src/analysis/derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; compares against the committed `results/theoretical_bounds.csv` and writes it only if absent |
 | Granger non-causality | `python src/analysis/validate_granger.py` | generates data internally | Granger non-causality battery (console only) |
 
 ## Results CSV inventory
 
-`results/` holds the analysis-input CSVs below, each the committed input to one
-analysis script (`equiv_summary.csv` is a script output, committed for
-reference), plus revision-era files noted after the list:
+`results/` holds every analysis-input CSV, each the committed input to one
+analysis script (`equiv_summary.csv` and `theoretical_bounds.csv` are script
+outputs, committed for reference):
 
 - `results_grid.csv` -- AR(1) grid
 - `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL
@@ -204,18 +205,15 @@ reference), plus revision-era files noted after the list:
 - `results_block_cov.csv` -- block-covariance family
 - `equiv_summary.csv` -- practical-equivalence summary
 - `etth1_coupling_partition.csv` -- ETTh1 window coupling scores
-
-Revision-era result CSVs live under `results/Revision/`:
-
-- `train_block_attention/results_block_attention.csv`, `diag_b5_gamma06.csv` -- block-wise attention ablation and its diagnostics
-- `train_boundary_p4/results_boundary_p4_complete.csv` (gamma 0.9), `..._gamma0_complete.csv`, `..._gamma03_complete.csv`, `..._gamma06_complete.csv` -- P=4 boundary cells, 5 CD + 5 CI seeds each
-- `train_etth1_b4/results_etth1_b4.csv`, `results_etth1_b4_windows.csv` -- matched-budget ETTh1 rerun with per-window errors
-- `train_grid_c84_block_attn/results_grid_C84_block_attn.csv` -- C=84 three-arm cell
-- `theoretical_bounds.csv` -- closed-form ceilings (script output)
-- `probe_boundary_p2_stdout.txt` -- P=2 feasibility probe log (memory and timed-step projection)
-`results/` also carries the stdout logs of the completed ECL CI/CD training
-sessions (`ecl_ci_cd_train_resumable_v*_stdout.txt`) as provenance for the
-paper's per-epoch cost figures.
+- `results_block_attention.csv`, `diag_b5_gamma06.csv` -- block-wise attention ablation and its diagnostics
+- `results_boundary_p4_gamma0_complete.csv`, `..._gamma03_`, `..._gamma06_`, `..._gamma09_complete.csv` -- P=4 boundary cells, 5 CD + 5 CI seeds each
+- `results_etth1_b4.csv`, `results_etth1_b4_windows.csv` -- matched-budget ETTh1 rerun with per-window errors
+- `results_grid_C84_block_attn.csv` -- C=84 three-arm cell
+- `theoretical_bounds.csv` -- closed-form CI/CD forecast-error ceilings
+`results/logs/` carries the stdout logs of the completed ECL CI/CD training
+sessions (`ecl_ci_cd_train_resumable_v*_stdout.txt`), the provenance for the
+paper's per-epoch cost figures, and the P=2 feasibility probe log
+(`probe_boundary_p2_stdout.txt`: peak memory and timed-step projection).
 
 ## Notebooks
 

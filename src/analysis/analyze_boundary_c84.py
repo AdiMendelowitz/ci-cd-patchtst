@@ -50,7 +50,7 @@ from scipy import stats
 import paired_stats as ps  # sibling module; on sys.path when run as a script
 
 _ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_CSV = _ROOT / "results" / "Revision" / "train_grid_c84_block_attn" / "results_grid_C84_block_attn.csv"
+_DEFAULT_CSV = _ROOT / "results" / "results_grid_C84_block_attn.csv"
 
 _MODES: tuple[str, ...] = ("CI", "CD", "CD_Block")
 _SEED_ORDER: tuple[int, ...] = (42, 123, 456, 789, 1011)

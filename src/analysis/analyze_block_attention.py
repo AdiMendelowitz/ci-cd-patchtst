@@ -1,7 +1,7 @@
 """Block-attention ablation analysis for the leader-follower sweep.
 
 Reproduces the three-arm leader-follower sweep under
-results/Revision/train_block_attention/: modes {CI, CD, CD_Block} at C = 21,
+results/: modes {CI, CD, CD_Block} at C = 21,
 rho = 0.5, P = 16, gamma in {0.0, 0.3, 0.6, 0.9}, seeds {42, 123, 456, 789,
 1011} (60 rows). CD_Block restricts attention to within-group blocks
 (models_cd_block.py); the CD-family arms run at the
@@ -36,7 +36,7 @@ from scipy import stats
 import paired_stats as ps  # sibling module; on sys.path when run as a script
 
 _ROOT = Path(__file__).resolve().parents[2]
-_RESULTS_DIR = _ROOT / "results" / "Revision" / "train_block_attention"
+_RESULTS_DIR = _ROOT / "results"
 _CSV = _RESULTS_DIR / "results_block_attention.csv"
 _DIAG = _RESULTS_DIR / "diag_b5_gamma06.csv"
 

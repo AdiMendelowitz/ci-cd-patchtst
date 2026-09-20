@@ -57,7 +57,7 @@ import pandas as pd
 import paired_stats as ps  # sibling module; on sys.path when run as a script
 
 _ROOT = Path(__file__).resolve().parents[2]
-_RESULTS_DIR = _ROOT / "results" / "Revision" / "train_etth1_b4"
+_RESULTS_DIR = _ROOT / "results"
 _WINDOWS = _RESULTS_DIR / "results_etth1_b4_windows.csv"
 _MAIN = _RESULTS_DIR / "results_etth1_b4.csv"
 _PARTITION = _ROOT / "results" / "etth1_coupling_partition.csv"

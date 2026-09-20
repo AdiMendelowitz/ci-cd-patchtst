@@ -105,7 +105,7 @@ _ECL_C = 321
 #   uses ceil, so committed step counts are pinned per cell below instead.
 # ecl: ECLDataset applies the iTransformer split (15840/26352 train
 #   proportion) to the real file's row count. The live training run
-#   (results/ecl_ci_cd_train_resumable_v3_stdout.txt) logs the actual split as
+#   (results/logs/ecl_ci_cd_train_resumable_v3_stdout.txt) logs the actual split as
 #   train_end=15813 rows; at seq_len=96, pred_len=96 that gives
 #   15813 - 96 - 96 + 1 = 15622 windows. This also matches the same log's
 #   CI steps/epoch of 1953 at batch 8 (ceil(15622 / 8) = 1953), which is an

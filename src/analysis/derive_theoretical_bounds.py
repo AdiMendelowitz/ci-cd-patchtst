@@ -96,7 +96,7 @@ auto-import.
 
 Writes
 ------
-results/Revision/theoretical_bounds.csv, resolved against the repository
+results/theoretical_bounds.csv, resolved against the repository
 root so the script produces the same file from any working directory.
 
 Row count: 62 (9 AR(1) grid + 4 block-covariance + 1 boundary sweep + 8
@@ -151,7 +151,7 @@ KALMAN_OBS_NOISE = 1e-10
 KALMAN_OBS_NOISE_PROBES = (1e-8, 1e-10, 1e-12)
 
 EXPECTED_ROWS = 62
-OUT_PATH = _ROOT / "results" / "Revision" / "theoretical_bounds.csv"
+OUT_PATH = _ROOT / "results" / "theoretical_bounds.csv"
 
 SCHEMA = ["family", "cell", "h", "bound_type", "bound", "sandwich_width"]
 MERGE_KEYS = ["family", "cell", "h", "bound_type"]

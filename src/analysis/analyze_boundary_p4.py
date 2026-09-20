@@ -11,14 +11,14 @@ Reads
 -----
 One or more current-environment CD+CI CSVs, any gamma coverage, unioned and
 deduplicated by (gamma, mode, seed) — for example the gamma-0.9 tranche
-(results_boundary_p4_complete.csv), the gamma-0 tranche
+(results_boundary_p4_gamma09_complete.csv), the gamma-0 tranche
 (results_boundary_p4_gamma0_complete.csv), and the gamma-0.6 tranche
 (results_boundary_p4_gamma06_complete.csv) together. CD and CI at a fixed
 (gamma, seed) train on the same data draw (generate(gamma, seed) is
 deterministic in (gamma, seed)), so the per-seed CD-CI difference is a matched
-pair within each gamma. Passing zero files uses the single legacy default
-(results_boundary_p4_complete.csv), preserving the original single-tranche
-behaviour.
+pair within each gamma. Passing zero files unions every committed
+results/results_boundary_p4_gamma*_complete.csv, which is the paper's full
+P=4 grid.
 
 results/results_boundary_p4_ci.csv  (committed, original environment)
     CI only at P=4, gamma in {0.6, 0.9}. Used ONLY as a cross-environment CI-vs-CI
@@ -30,20 +30,17 @@ test_mae, best_epoch, batch_size, steps_per_epoch, total_steps.
 
 Paths
 -----
-Candidate directories resolve against the repository root (first parent holding a
-results/ directory), so the script runs from any CWD. The boundary P=4 folder is
-discovered under results/Revision/ as train_boundary_p4, with a train_bound*_p4
-glob as the fallback. Explicit paths override discovery entirely:
+Default inputs resolve against the repository root (first parent holding a
+results/ directory), so the script runs from any CWD. Explicit paths override
+the defaults:
 
     python analyze_boundary_p4.py [new_csv ...] [--ci-ref committed_p4_ci.csv]
 
-    # single tranche (legacy-equivalent):
-    python analyze_boundary_p4.py results_boundary_p4_complete.csv
-    # multiple tranches unioned in one run:
-    python analyze_boundary_p4.py results_boundary_p4_complete.csv \\
-        results_boundary_p4_gamma0_complete.csv \\
-        results_boundary_p4_gamma06_complete.csv --ci-ref results_boundary_p4_ci.csv
-    Paths above are relative to the current working directory; run from the repository root or pass full paths.
+    # every committed P=4 file (default):
+    python src/analysis/analyze_boundary_p4.py
+    # a single tranche:
+    python src/analysis/analyze_boundary_p4.py results/results_boundary_p4_gamma09_complete.csv
+    Explicit paths are relative to the current working directory.
 
 Statistical design
 ------------------
@@ -83,7 +80,7 @@ EXPECTED_SPE = 104
 EXPECTED_BATCH = 128
 EXPECTED_P = 4
 EXPECTED_C = 21
-NEW_CSV_NAME = "results_boundary_p4_complete.csv"
+NEW_CSV_GLOB = "results_boundary_p4_gamma*_complete.csv"
 THRESHOLD_PCT = 1.0  # pre-specified practical-equivalence band, percent of CI mean.
 
 SCHEMA = ["dataset", "C", "rho", "gamma", "patch_size", "mode", "seed",
@@ -130,43 +127,6 @@ def repo_root() -> Path:
         "inside the repository or pass explicit CSV paths.")
 
 
-def _warn_if_diverged(preferred: Path, revision_root: Path, filename: str) -> None:
-    """Flag byte-level disagreement between the preferred boundary-P4 folder and
-    any sibling folder holding the same filename, so a stale copy is never
-    preferred silently."""
-    for other in sorted(revision_root.glob("train_bound*_p4")):
-        if other == preferred:
-            continue
-        a, b = preferred / filename, other / filename
-        if a.exists() and b.exists() and a.read_bytes() != b.read_bytes():
-            print(f"WARNING: {filename} differs between {preferred} and {other}; "
-                  f"using {preferred}. Verify which copy is current.", file=sys.stderr)
-
-
-def boundary_p4_root(root: Path) -> Path:
-    """Locate the boundary P=4 results folder under results/Revision/.
-
-    Prefers train_boundary_p4, the committed folder. Falls back to a
-    train_bound*_p4 glob, failing loudly rather than guessing if the glob is
-    ambiguous or empty.
-    """
-    exact = root / "results" / "Revision" / "train_boundary_p4"
-    if exact.is_dir():
-        _warn_if_diverged(exact, root / "results" / "Revision", NEW_CSV_NAME)
-        return exact
-    matches = sorted((root / "results" / "Revision").glob("train_bound*_p4"))
-    if len(matches) == 1:
-        return matches[0]
-    if not matches:
-        raise FileNotFoundError(
-            "no train_bound*_p4 folder found under results/Revision/ "
-            "(expected train_boundary_p4; pass an explicit CSV path if the "
-            "local folder uses a different name)")
-    raise FileNotFoundError(
-        f"ambiguous boundary P=4 folder — found {matches}; pass an explicit "
-        "CSV path instead of relying on discovery")
-
-
 def resolve_csv(filename: str, rel_candidates: tuple[str, ...],
                 override: str | None) -> Path:
     if override is not None:
@@ -183,10 +143,14 @@ def resolve_csv(filename: str, rel_candidates: tuple[str, ...],
         f"{filename} not found under {[str(root / c) for c in rel_candidates]}")
 
 
-def default_new_csv() -> Path:
-    """Legacy single-file default: the gamma-0.9 file of record if no new-CSV
+def default_new_csvs() -> list[Path]:
+    """Every committed P=4 file of record under results/, when no new-CSV
     paths are given on the command line."""
-    return boundary_p4_root(repo_root()) / NEW_CSV_NAME
+    paths = sorted((repo_root() / "results").glob(NEW_CSV_GLOB))
+    if not paths:
+        raise FileNotFoundError(
+            f"no {NEW_CSV_GLOB} under results/; pass explicit CSV paths")
+    return paths
 
 
 def load_new(path: Path) -> pd.DataFrame:
@@ -400,12 +364,12 @@ def build_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Analysis: P=4 CD vs CI in the current environment. "
                      "Accepts any number of current-environment CSVs (any gamma "
-                     "coverage); with none given, falls back to the single legacy "
-                     f"default ({NEW_CSV_NAME}).")
+                     "coverage); with none given, unions every committed "
+                     f"results/{NEW_CSV_GLOB}.")
     parser.add_argument(
         "new_csvs", nargs="*", metavar="NEW_CSV",
-        help="Current-environment CD+CI CSV(s) to union. Omit to use the legacy "
-             f"single-file default ({NEW_CSV_NAME}, typo-tolerant discovery).")
+        help="Current-environment CD+CI CSV(s) to union. Omit to use every "
+             f"committed results/{NEW_CSV_GLOB}.")
     parser.add_argument(
         "--ci-ref", dest="ci_ref", default=None, metavar="PATH",
         help="Committed original-environment CI-only reference CSV. "
@@ -422,7 +386,7 @@ def main(argv: list[str]) -> int:
             if not p.exists():
                 raise FileNotFoundError(f"explicit path {p} does not exist")
     else:
-        new_paths = [default_new_csv()]
+        new_paths = default_new_csvs()
     old_ci_path = resolve_csv("results_boundary_p4_ci.csv", ("results",), args.ci_ref)
 
     new = load_new_multi(new_paths)

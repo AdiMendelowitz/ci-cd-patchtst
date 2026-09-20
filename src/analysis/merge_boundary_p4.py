@@ -39,7 +39,9 @@ Usage
 
 Writes
 ------
-results/Revision/train_boundary_p4/results_boundary_p4_gamma<tag>_complete.csv
+<results-root>/train_boundary_p4/results_boundary_p4_gamma<tag>_complete.csv
+    (the per-slice source files are local run outputs and are not committed;
+    the merged files of record are committed flat under results/)
     <tag> follows the established naming: 0 -> "0", 0.3 -> "03",
     0.6 -> "06", 0.9 -> "09" (the single post-decimal digit, zero-padded to
     two characters, except gamma=0 itself which keeps the pre-existing
@@ -177,7 +179,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--gamma", type=float, required=True,
                         help="Target gamma value, e.g. 0.3")
-    parser.add_argument("--results-root", type=str, default="results/Revision",
+    parser.add_argument("--results-root", type=str, default="results",
                         help="Root containing the train_bound*_p4 folder.")
     args = parser.parse_args()
 
