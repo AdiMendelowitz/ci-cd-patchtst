@@ -54,3 +54,8 @@ ETTh1.csv
 *.nav
 *.snm
 *.vrb
+
+# Local-only working documents and duplicates (never published)
+docs/
+.claude/
+paper/
