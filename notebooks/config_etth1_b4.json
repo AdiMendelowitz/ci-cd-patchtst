@@ -1,0 +1,15 @@
+{
+  "assignment": "b4-etth1-full",
+  "batch_size": 32,
+  "session_budget_hours": 11.0,
+  "runs": [
+    {"pred_len": 96,  "mode": "CD", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 96,  "mode": "CI", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 192, "mode": "CD", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 192, "mode": "CI", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 336, "mode": "CD", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 336, "mode": "CI", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 720, "mode": "CD", "seeds": [42, 123, 456, 789, 1011]},
+    {"pred_len": 720, "mode": "CI", "seeds": [42, 123, 456, 789, 1011]}
+  ]
+}

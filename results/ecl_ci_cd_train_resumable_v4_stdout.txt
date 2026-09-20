@@ -1,0 +1,80 @@
+﻿ecl_ci_cd_train_resumable
+ecl_ci_cd_train_resumable
+
+Share
+
+Edit
+
+Download
+Logs
+
+Download Logs
+Successfully ran in 12525.8s
+Accelerator
+GPU T4 x2
+
+Environment
+Latest Container Image
+
+Output
+58.01 MB
+
+Time
+#
+Log Message
+6.8s	1	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+6.8s	2	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+6.8s	3	0.00s - to python to disable frozen modules.
+6.8s	4	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+7.3s	5	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+7.3s	6	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+7.3s	7	0.00s - to python to disable frozen modules.
+7.3s	8	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+13.6s	9	Device: cuda
+14.2s	10	[bootstrap] registry seeded from /kaggle/input/notebooks//ecl-ci-cd-train-resumable/results/results_ecl.csv
+14.6s	11	[bootstrap] ckpt_ecl_cd_pred336_s456.pt seeded from /kaggle/input/notebooks/<username>/ecl-ci-cd-train-resumable/results/checkpoints/ckpt_ecl_cd_pred336_s456.pt
+14.8s	12	[bootstrap] ckpt_ecl_cd_pred96_s456.pt seeded from /kaggle/input/notebooks/<username>/ecl-ci-cd-train-resumable/results/checkpoints/ckpt_ecl_cd_pred96_s456.pt
+15.1s	13	[bootstrap] ckpt_ecl_ci_pred336_s456.pt seeded from /kaggle/input/notebooks/<username>/ecl-ci-cd-train-resumable/results/checkpoints/ckpt_ecl_ci_pred336_s456.pt
+15.3s	14	[bootstrap] ckpt_ecl_ci_pred96_s456.pt seeded from /kaggle/input/notebooks/<username>/ecl-ci-cd-train-resumable/results/checkpoints/ckpt_ecl_ci_pred96_s456.pt
+15.3s	15	Registry: 3 runs already complete (current architecture): {('CI', 96, 456), ('CD', 96, 456), ('CI', 336, 456)}
+15.3s	16	SKIP CI pred_len=96 seed=456 (already in results)
+15.3s	17	SKIP CD pred_len=96 seed=456 (already in results)
+15.3s	18	SKIP CI pred_len=336 seed=456 (already in results)
+15.3s	19	
+15.3s	20	============================================================
+15.3s	21	Mode: CD | pred_len: 336 | seed: 456
+15.3s	22	============================================================
+18.0s	23	ECLDataset [train]: 15813 rows from 26304 total (train_end=15813, val_end=21060)
+19.4s	24	ECLDataset [val]: 5247 rows from 26304 total (train_end=15813, val_end=21060)
+21.0s	25	ECLDataset [test]: 5244 rows from 26304 total (train_end=15813, val_end=21060)
+26.2s	26	  [resume] ckpt_ecl_cd_pred336_s456.pt: 4 epochs done, best_val=0.228317 @ epoch 4, stopped=False
+26.2s	27	[CD pred=336 seed=456] params: 1,070,416 | batch: 8 | accum: 1 | effective_batch: 8 | steps/epoch: 1923 | effective_steps/epoch: 1923 | CD_tokens: 3531 | start_epoch: 5
+982.7s	28	  [CD pred=336 seed=456] Epoch   5/50 | train MSE 0.2095 | val MSE 0.2260 | lr 1.00e-04 | 956s/ep | 956s total
+5765.9s	29	  [CD pred=336 seed=456] Epoch  10/50 | train MSE 0.1954 | val MSE 0.2240 | lr 9.70e-05 | 956s/ep | 5739s total
+10542.8s	30	  [CD pred=336 seed=456] Epoch  15/50 | train MSE 0.1846 | val MSE 0.2556 | lr 8.83e-05 | 955s/ep | 10516s total
+12454.5s	31	  [CD pred=336 seed=456] Epoch  17/50 | train MSE 0.1817 | val MSE 0.2770 | lr 8.35e-05 | 956s/ep | 12428s total
+12454.5s	32	  [CD pred=336 seed=456] Early stop @ epoch 17. Best: epoch 7.
+12515.1s	33	  [CD pred=336 seed=456] Test MSE: 0.2150 | Test MAE: 0.3000 | Best val MSE: 0.2181 @ epoch 7
+12515.1s	34	  Results written (4/4 runs complete)
+12515.1s	35	
+12515.1s	36	=== CI vs CD Results -- ECL ===
+12515.1s	37	mode  pred_len  seed  test_mse  test_mae  best_epoch
+12515.1s	38	  CI        96   456  0.175262  0.260153          42
+12515.1s	39	  CD        96   456  0.188596  0.277952          13
+12515.1s	40	  CI       336   456  0.203676  0.286915          25
+12515.1s	41	  CD       336   456  0.214991  0.299968           7
+12515.1s	42	Rows in results_ecl.csv: 4 (expected 4: 2 pred_lens x {CI, CD}, seed=456)
+12515.1s	43	mode  pred_len  seed  test_mse  test_mae  best_epoch
+12515.1s	44	  CI        96   456  0.175262  0.260153          42
+12515.1s	45	  CD        96   456  0.188596  0.277952          13
+12515.1s	46	  CI       336   456  0.203676  0.286915          25
+12515.1s	47	  CD       336   456  0.214991  0.299968           7
+12515.1s	48	All output files verified.
+12520.8s	49	/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+12520.8s	50	  cells[i][c] = re.sub('\\\\\|', '|', cell)
+12521.0s	51	/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+12521.0s	52	  text = re.sub(r'_', '\_', text) # Escape underscores in display text
+12521.6s	53	[NbConvertApp] Converting notebook __notebook__.ipynb to notebook
+12521.9s	54	[NbConvertApp] Writing 50674 bytes to __notebook__.ipynb
+12524.2s	55	[NbConvertApp] Converting notebook __notebook__.ipynb to html
+12525.1s	56	[NbConvertApp] Writing 416065 bytes to __results__.html

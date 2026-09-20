@@ -24,8 +24,6 @@ Run from a clean checkout:
     python analyze_leader_follower.py --csv path/to/results_leader_follower.csv
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

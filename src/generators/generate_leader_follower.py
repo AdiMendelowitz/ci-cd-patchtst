@@ -47,7 +47,7 @@ original AR(1) grid (which has gamma=0 implicitly).
 
 Usage
 -----
-Run from time-series-forecasting/ or import generate() directly:
+Run from src/generators/ in the repository root, or import generate() directly:
 
     from generate_leader_follower import generate, make_transition_matrix
 
@@ -67,9 +67,8 @@ N_FOLLOWERS: int = 10
 N_ISOLATE:   int = 1
 C_TOTAL:     int = N_LEADERS + N_FOLLOWERS + N_ISOLATE  # 21
 
-# Index boundaries
-_FOLLOWER_SLICE: slice = slice(N_LEADERS, N_LEADERS + N_FOLLOWERS)
-_ISOLATE_IDX:    int   = N_LEADERS + N_FOLLOWERS  # 20
+# Index boundary
+_ISOLATE_IDX: int = N_LEADERS + N_FOLLOWERS  # 20
 
 # Training configuration matching the original AR(1) grid
 T_TOTAL:  int = 14_400
@@ -167,12 +166,12 @@ def generate(
 
     total_steps = T + burn_in
     X = np.zeros((total_steps, C_TOTAL), dtype=np.float64)
-    # The per-step loop is intentional. The VAR(1) recurrence is inherently
-    # sequential (X[t] depends on X[t-1]), and the noise is drawn one step at
-    # a time to match the RNG draw order used historically. Pre-drawing all
-    # noise as (total_steps-1, C_TOTAL) and applying L via matmul would be
-    # numerically equivalent and seed-compatible, but the gain at T=15,400
-    # and C=21 is negligible since generate() is called once per training run.
+    # The per-step loop is intentional: the VAR(1) recurrence is inherently
+    # sequential (X[t] depends on X[t-1]), so noise must be drawn and applied
+    # one step at a time. Pre-drawing all noise as (total_steps-1, C_TOTAL) and
+    # applying L via matmul would be numerically equivalent and seed-compatible,
+    # but the gain at T=15,400 and C=21 is negligible since generate() is
+    # called once per training run.
     for t in range(1, total_steps):
         eps  = L @ rng.standard_normal(C_TOTAL)
         X[t] = A @ X[t - 1] + eps

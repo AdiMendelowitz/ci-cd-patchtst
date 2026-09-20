@@ -1,0 +1,11 @@
+dataset,C,rho,gamma,patch_size,mode,seed,test_mse,test_mae,best_epoch,batch_size,steps_per_epoch,total_steps
+leader_follower_var1,21,0.5,0.0,4,CD,42,0.98825081,0.79284655,21,128,104,2184
+leader_follower_var1,21,0.5,0.0,4,CD,123,0.99310006,0.7939271,25,128,104,2600
+leader_follower_var1,21,0.5,0.0,4,CI,42,0.98757904,0.79254454,19,128,104,1976
+leader_follower_var1,21,0.5,0.0,4,CI,123,0.99497757,0.79473237,12,128,104,1248
+leader_follower_var1,21,0.5,0.0,4,CI,456,0.96058446,0.78159207,16,128,104,1664
+leader_follower_var1,21,0.5,0.0,4,CI,789,1.00564852,0.802393,23,128,104,2392
+leader_follower_var1,21,0.5,0.0,4,CI,1011,0.96901582,0.78592922,28,128,104,2912
+leader_follower_var1,21,0.5,0.0,4,CD,1011,0.96756208,0.78533583,17,128,104,1768
+leader_follower_var1,21,0.5,0.0,4,CD,456,0.96071366,0.78163259,16,128,104,1664
+leader_follower_var1,21,0.5,0.0,4,CD,789,1.00688417,0.80291026,13,128,104,1352

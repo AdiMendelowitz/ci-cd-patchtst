@@ -3,10 +3,9 @@
 Purpose
 -------
 Tests whether the RQ1 null (no CD advantage from purely instantaneous
-correlation) survives a covariance family other than compound symmetry. The
-draft asserts that compound symmetry is "the configuration most hostile to CD";
-this generator supplies the second covariance family needed to turn that
-assertion into evidence.
+correlation) survives a covariance family other than compound symmetry.
+Compound symmetry is treated as the configuration most hostile to CD; this
+generator supplies the second covariance family needed to test that claim.
 
 Design
 ------

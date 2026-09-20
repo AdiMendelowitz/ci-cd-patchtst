@@ -1,0 +1,3 @@
+dataset,num_variates,num_timesteps_train,lag0_mean_abs_r,lag0_median_abs_r,lag0_min_abs_r,lag0_max_abs_r,mean_max_over_lags,best_lag,mean_abs_r_at_best_lag,pct_pairs_gain_ge_5pct_from_lags,top_pairs_lag0
+ETTh1,7,8640,0.311013,0.232797,0.037538,0.983724,0.349276,0,0.311013,42.86,"[('HUFL', 'MUFL', 0.9837), ('HULL', 'MULL', 0.9256), ('HULL', 'OT', 0.6014), ('MULL', 'OT', 0.5235), ('LUFL', 'LULL', 0.4353)]"
+ECL,321,15813,0.502687,0.482602,6e-06,0.999993,0.596492,0,0.502687,49.09,"[('21', '32', 1.0), ('89', '91', 0.976), ('93', '292', 0.9752), ('186', '187', 0.9643), ('210', '262', 0.961)]"

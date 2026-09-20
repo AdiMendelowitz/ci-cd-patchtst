@@ -134,6 +134,13 @@ def grand_mean_diff(diff_df: pd.DataFrame) -> dict:
     The simplest unbiased scalar summary of the difference across the design. It
     requires no extrapolation, unlike an OLS intercept.
 
+    Valid only when every (cell, seed) row is an independent observation. If the
+    same seed value recurs across multiple cells -- as it does whenever a design
+    reuses one seed set across several settings of a swept parameter -- those
+    rows share a common source (the seed's own training/data-draw randomness) and
+    are not independent; use grand_mean_diff_clustered instead in that case, or
+    this will understate the interval width.
+
     Args:
         diff_df: Output of make_diff_frame.
 
@@ -144,6 +151,49 @@ def grand_mean_diff(diff_df: pd.DataFrame) -> dict:
     n = len(d)
     mean_ = float(d.mean())
     se_ = float(d.std(ddof=1) / np.sqrt(n))
+    tcrit = float(stats.t.ppf(0.975, df=n - 1))
+    return {
+        "mean": mean_,
+        "se": se_,
+        "ci_lo": mean_ - tcrit * se_,
+        "ci_hi": mean_ + tcrit * se_,
+        "base_mean": float(diff_df[_BASE].mean()),
+        "n": n,
+    }
+
+
+def grand_mean_diff_clustered(diff_df: pd.DataFrame, cluster_col: str) -> dict:
+    """Grand mean of d, clustered by an identifier shared across cells, with a 95% t-CI.
+
+    Use this instead of grand_mean_diff whenever the same cluster_col value (for
+    example a seed) recurs across multiple cells: pooling every (cell, cluster)
+    row as an independent draw then understates the interval, since rows sharing
+    a cluster are not independent. This averages diff within each cluster first,
+    giving one independent unit per cluster, then takes a paired t-CI over those
+    units -- the cluster, not the (cell, cluster) row, is the independent unit.
+
+    Args:
+        diff_df: Output of make_diff_frame.
+        cluster_col: Column identifying the independent unit, typically "seed".
+
+    Returns:
+        Dict with mean, se, ci_lo, ci_hi, base_mean, and n (clusters, not rows).
+
+    Raises:
+        ValueError: If clusters do not all cover the same number of rows, since
+            an uneven cluster size would silently change what "clustered" means
+            rather than signal that the design is unbalanced.
+    """
+    counts = diff_df.groupby(cluster_col).size()
+    if counts.nunique() > 1:
+        raise ValueError(
+            f"Unequal row count per {cluster_col}; every cluster must cover the "
+            f"same cells for a clustered mean to be well defined: {counts.to_dict()}"
+        )
+    per_cluster = diff_df.groupby(cluster_col)["diff"].mean()
+    n = len(per_cluster)
+    mean_ = float(per_cluster.mean())
+    se_ = float(per_cluster.std(ddof=1) / np.sqrt(n))
     tcrit = float(stats.t.ppf(0.975, df=n - 1))
     return {
         "mean": mean_,

@@ -1,0 +1,5 @@
+config,mode,batch,steps_per_epoch,steps_timed,warmup_sec,sec_per_epoch,peak_gib,proj_epochs,proj_epochs_src,projected_hours_converged_run,note
+ecl_cd,CD,4,3906,1,608869.64,608869.64,nan,50,worst case (no committed ECL CD runs),8456.523,
+ecl_cd,CD,0,,,,,,,,,infeasible (8)
+ecl_cd_block,CD_Block,128,123,1,13169.12,13169.12,nan,50,worst case (no committed ECL CD_Block runs),182.904,
+ecl_cd_block,CD_Block,8,1953,1,8477.44,8477.44,nan,50,worst case (no committed ECL CD_Block runs),117.742,
