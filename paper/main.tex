@@ -1,12 +1,11 @@
 \documentclass[10pt]{article} % TMLR requires 10pt
-\usepackage{tmlr}
+\usepackage[accepted]{tmlr}
 \usepackage{url}
-% Submission (anonymous, under review) uses the line above as-is.
-% If/when accepted, switch to:
-%   \usepackage[accepted]{tmlr}
-%   \def\month{MM} \def\year{YYYY}
-%   \def\openreview{\url{https://openreview.net/forum?id=XXXX}}
-% For a de-anonymized preprint (e.g. arXiv), use \usepackage[preprint]{tmlr} instead.
+% Camera-ready (accepted) version. For a de-anonymised preprint (e.g. arXiv), use
+% \usepackage[preprint]{tmlr} instead.
+\def\month{10}
+\def\year{2026}
+\def\openreview{\url{https://openreview.net/forum?id=aiUZ2y8UNI}}
 
 \usepackage{graphicx}
 \graphicspath{{figures/}}
@@ -17,6 +16,8 @@
 \setlength{\emergencystretch}{3em}
 
 \title{Equal Accuracy, Unequal Cost: \\ Channel Dependence in PatchTST under Controlled Coupling}
+
+\author{\name Adi Mendelowitz \email adimendelowitz@gmail.com}
 
 \begin{document}
 
@@ -65,12 +66,13 @@
     is stronger on those particular series, but not why. Here we control the generative process instead: synthetic AR(1) and
     leader-follower VAR(1) families that vary instantaneous correlation, lagged cross-channel dependence, and variate count
     independently, with ETTh1 and ECL serving as real-data context rather than primary evidence.\footnote{Code,
-    configuration files, and analysis scripts for reproducing all reported results are available at an anonymized
-    repository: \url{https://anonymous.4open.science/r/ci-cd-patchtst-FCEE/}.}
+    configuration files, result files, and analysis scripts for reproducing all reported results are available at
+    \url{https://github.com/AdiMendelowitz/ci-cd-patchtst} (release \texttt{v1.0-tmlr}).}
 
     Section~\ref{sec:setup} describes the experimental design, Section~\ref{sec:results} presents the AR(1) grid and real-data
     results, Section~\ref{sec:analysis} covers the leader-follower experiments, Section~\ref{sec:robustness} presents the
-    fair-protocol robustness controls, and the remaining sections cover limitations, related work, and conclusions.
+    fair-protocol robustness controls, Section~\ref{sec:theoretical_bound} derives the closed-form accuracy ceilings, and the
+    remaining sections cover limitations, related work, and conclusions.
 
     \subsection{Research Questions and Scope}
 
@@ -360,7 +362,7 @@
     across the grid, with the largest mean difference of $0.0054$ MSE units at $C = 84$, $\rho = 0.9$, and no consistent
     direction to the gap. CI leads at $C = 7$ across all $\rho$, at $C = 21$ for $\rho \in \{0.1, 0.5\}$, and at $C = 84$
     for $\rho \in \{0.5, 0.9\}$; CD leads marginally at $C = 21$, $\rho = 0.9$ and at $C = 84$, $\rho = 0.1$. At
-    $C \in \{21, 84\}$ DLinear trails both PatchTST variants everywhere except at $C = 84$, $\rho = 0.1$ cell, where all
+    $C \in \{21, 84\}$ DLinear trails both PatchTST variants everywhere except at the $C = 84$, $\rho = 0.1$ cell, where all
     three modes coincide at 0.9831--0.9832. At $C = 7$ it trails both variants throughout, by roughly $1\%$ at $\rho = 0.1$,
     widening to roughly $4\%$ at $\rho = 0.9$. The Transformer representations add value as dimensionality and correlation
     strength rise, but this leaves the CD/CI comparison (the central question) unaffected by where the DLinear baseline falls.
@@ -897,7 +899,7 @@
         \centering
         \includegraphics[width=\textwidth]{compute_accuracy.png}
         \caption{Test MSE versus total gradient updates to the validation-selected checkpoint (log scale), CI and CD,
-            for two cells with substantial optimization-effort asymmetry. This measures update count, not wall-clock
+            for two cells with substantial optimisation-effort asymmetry. This measures update count, not wall-clock
             compute, and each CD update is also more expensive, so these ratios understate the true compute gap. Points
             are means over five seeds; error bars show the cross-seed standard deviation. CD reaches essentially the
             same accuracy as CI while consuming 5.6$\times$ (leader-follower, $\gamma=0.6$) to 15.6$\times$ (AR(1)
@@ -981,7 +983,7 @@
     are therefore specific to this dynamic regime and horizon. The horizon scoping matters. The $1\%$ band was specified
     for $h = 96$ and cannot be carried to $h < 50$ without restating it against the ceilings of Table~\ref{tab:theoretical_bounds},
     which in turn fixes the target for the natural next experiment, a short-horizon comparison at $h \le 10$, where the
-    relative analytical CD--CI gap reaches $9.8$--$39.6\%$ of the CI-achievable error at $h = 1$ against the $1\%$ criterion
+    relative analytical CD$-$CI gap reaches $9.8$--$39.6\%$ of the CI-achievable error at $h = 1$ against the $1\%$ criterion
     used at $h = 96$.
 
     The CD architecture used in the main experiments applies a per-variate head after the joint encoder, so cross-variate
@@ -1011,7 +1013,8 @@
     available short-horizon signal into measurable accuracy. The adjacent $P = 4$ configuration, initially excluded under
     the same assumed ceiling, was subsequently run in full and shows no CD advantage (Table~\ref{tab:boundary}), which
     narrows but does not close the untested region. A variate-token CD implementation, attending over $C$ tokens rather
-    than $C \cdot N$, would avoid this memory constraint and would let the remaining $P = 2$ gap close. Building such a
+    than $C \cdot N$, would remove both the memory constraint and the quadratic-in-$C$ compute cost, and would let the
+    remaining $P = 2$ gap close. Building such a
     variant fell outside the scope of this work.
 
     The $\gamma = 0.6$ diagnostic in Section~\ref{subsec:overtrain} rests on one instrumented rerun per (mode, seed) at a
@@ -1066,7 +1069,7 @@
     attention. It is the closest antecedent to the leader-follower design used here; its limitation in this context is
     that the datasets it uses are observational, meaning lag structure and instantaneous correlation cannot be decoupled.
 
-    \textbf{Abdelmalak et al.}~\citep{abdelmalak2025channeldependence} show that standard benchmarks favour CI because
+    \textbf{Abdelmalak et al.}~(\citeyear{abdelmalak2025channeldependence}) show that standard benchmarks favour CI because
     they are dominated by within-channel periodicity, while datasets generated from chaotic ODEs with genuine
     dynamical coupling favour CD. The two papers are complementary rather than competing. Where Abdelmalak et al.\
     contrast dataset categories, we fix the generative model analytically and sweep coupling strength continuously.
