@@ -45,7 +45,7 @@ Fused / flash-attention kernels never materialise the (C*N) x (C*N)
 score matrix (they use online softmax with O(C*N) memory per head), so
 the naive bound computed here is expected to sit far above these
 measured totals. That gap is the arithmetic support for the claim in
-response_to_reviewer_yc7L_v6.md: current-environment feasibility comes
+the paper's cost section: current-environment feasibility comes
 from kernel fusion removing this term, not from the term itself having
 shrunk, and the O(C^2 N^2) compute cost (unaffected by fusion) is what
 still makes a full ECL-CD run close to (not dramatically beyond) a single
