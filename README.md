@@ -337,12 +337,15 @@ records each file's role and SHA256 and the shared protocol. The three generator
 ## Citation
 
 `CITATION.cff` at the repository root carries the same reference for GitHub's
-"Cite this repository" button. Releases from `v1.2-tmlr` onwards are archived
-on Zenodo; the concept DOI <https://doi.org/10.5281/zenodo.22859870> always
-resolves to the newest archived release and each release also has its own
-DOI (`v1.2-tmlr`: 10.5281/zenodo.22859871). The paper cites release
-`v1.0-tmlr`, the state of the repository at camera-ready submission; later
-releases are listed in `CHANGELOG.md` and never move that tag.
+"Cite this repository" button. The repository is archived on Zenodo under a
+single concept DOI, <https://doi.org/10.5281/zenodo.22859870>, which always
+resolves to the newest archived version; each release also has its own
+version DOI (`v1.0-tmlr`: 10.5281/zenodo.22860170; `v1.2-tmlr`:
+10.5281/zenodo.22859871). The paper cites `v1.0-tmlr`, the state of the
+repository at camera-ready submission; that state is archived and will not
+change. Later releases are listed in `CHANGELOG.md` and never move that tag.
+Prefer citing the concept DOI alongside the tag, since it survives even if
+GitHub or the repository itself later disappears.
 
 ```
 @article{mendelowitz2026equalaccuracy,
