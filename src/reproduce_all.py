@@ -12,11 +12,12 @@ failure.
 Usage, from the repository root:
     python src/reproduce_all.py            # every command in the table
     python src/reproduce_all.py --tests    # also run the unit tests first
-    python src/reproduce_all.py --quiet    # summary only, no script output
+    python src/reproduce_all.py --quiet    # summary only; failed commands still print
 """
 
 import argparse
 import hashlib
+import os
 import subprocess
 import sys
 import time
@@ -67,12 +68,16 @@ def _figure_digests() -> dict[str, str]:
 
 
 def _run(args: list[str], quiet: bool) -> tuple[int, str]:
+    # The child's stdout is a pipe, whose default encoding on Windows is the
+    # ANSI code page; force UTF-8 so scripts that print non-ASCII do not fail
+    # under the runner when they succeed in a terminal.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     proc = subprocess.run(
         [sys.executable, *args], cwd=_ROOT, capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
+        encoding="utf-8", errors="replace", env=env,
     )
     output = proc.stdout + ("\n" + proc.stderr if proc.stderr else "")
-    if not quiet:
+    if not quiet or proc.returncode != 0:
         print(output, end="" if output.endswith("\n") else "\n")
     return proc.returncode, output
 
@@ -80,7 +85,8 @@ def _run(args: list[str], quiet: bool) -> tuple[int, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tests", action="store_true", help="run the unit tests first")
-    parser.add_argument("--quiet", action="store_true", help="print the summary only")
+    parser.add_argument("--quiet", action="store_true",
+                        help="print the summary only, plus the output of any failed command")
     opts = parser.parse_args()
 
     results: list[tuple[str, str, float]] = []
