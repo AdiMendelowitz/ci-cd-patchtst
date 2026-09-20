@@ -2,9 +2,12 @@
 
 This is the generator that produced the AR(1) grid series for seeds
 {42, 123, 456} in results/results_grid.csv. Seeds {789, 1011} were generated
-by the same process with 14,400 usable timesteps (burn-in simulated on top of
-the returned length rather than inside it); the paper's protocol table records
-the two usable lengths and the resulting training-window counts.
+by the inline generator in notebooks/train_grid_extra_seeds.ipynb: the same
+process with 14,400 usable timesteps (burn-in simulated on top of the returned
+length rather than inside it) and innovations drawn through a Cholesky factor
+rather than multivariate_normal, so the two implementations share the process
+but not the random stream. The paper's protocol table records the two usable
+lengths and the resulting training-window counts.
 
 Two properties are controlled independently:
     C:   number of variates
