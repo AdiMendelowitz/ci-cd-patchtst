@@ -5,7 +5,7 @@ authors:
   - family-names: Mendelowitz
     given-names: Adi
     email: adimendelowitz@gmail.com
-version: v1.0-tmlr
+version: v1.1-tmlr
 date-released: 2026-09-20
 repository-code: https://github.com/AdiMendelowitz/ci-cd-patchtst
 license: MIT

@@ -50,12 +50,27 @@ Kaggle session's wall-clock budget.
 
 Writes
 ------
-results/vram_bound.csv, the same figures in machine-readable form.
+results/vram_bound.csv, the same figures in machine-readable form. When the
+file already exists (it is committed), the fresh computation is compared
+against it instead, the same posture as derive_theoretical_bounds.py: a rerun
+over the committed file is a reproducibility check, and the process exit code
+reports agreement.
 """
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+
+_ROOT = Path(__file__).resolve().parents[2]
+OUT_PATH = _ROOT / "results" / "vram_bound.csv"
+SCHEMA = [
+    "batch", "tokens_C_N", "num_heads", "num_layers", "bound_1layer_GiB",
+    "bound_alllayers_GiB", "measured_fused_GiB", "measured_sec_per_epoch",
+    "measured_fused_OOM",
+]
+NUMERIC = ["bound_1layer_GiB", "bound_alllayers_GiB", "measured_fused_GiB", "measured_sec_per_epoch"]
+TOL = 1e-6
 
 # ECL CD architecture constants (main.tex Table 2; train_ecl.ipynb /
 # ecl_ci_cd_train.ipynb CONFIG; N derived from seq_len/patch_size/stride).
@@ -97,6 +112,36 @@ def crossover_batch(tokens: int, num_heads: int, num_layers: int,
     budget_bytes = budget_gib * GIB
     per_batch_element = num_heads * (tokens ** 2) * bytes_per_element * num_layers
     return budget_bytes / per_batch_element
+
+
+def compare_with_existing(rows: list[dict], path: Path) -> int:
+    """Compare a freshly computed table against the file already on disk.
+
+    Returns a process exit code, printing any disagreement.
+    """
+    shown = path.relative_to(_ROOT) if path.is_relative_to(_ROOT) else path
+    fresh = pd.DataFrame(rows)[SCHEMA].sort_values("batch").reset_index(drop=True)
+    stored = pd.read_csv(path)
+    missing = [c for c in SCHEMA if c not in stored.columns]
+    if missing:
+        print(f"\nFAIL: {shown} lacks columns {missing}")
+        return 1
+    stored = stored[SCHEMA].sort_values("batch").reset_index(drop=True)
+    if list(fresh["batch"]) != list(stored["batch"]):
+        print(f"\nFAIL: batch keys differ: computed {list(fresh['batch'])}, stored {list(stored['batch'])}")
+        return 1
+    for column in SCHEMA:
+        new, old = fresh[column], stored[column]
+        if column in NUMERIC:
+            same = np.isclose(new.astype(float), old.astype(float), atol=TOL, equal_nan=True)
+        else:
+            same = new.astype(str).values == old.astype(str).values
+        if not np.all(same):
+            print(f"\nFAIL: column {column} differs from {shown}:")
+            print(pd.DataFrame({"batch": fresh["batch"], "computed": new, "stored": old}).to_string(index=False))
+            return 1
+    print(f"\n{shown} already exists; fresh computation matches all {len(stored)} stored rows")
+    return 0
 
 
 def main() -> int:
@@ -151,12 +196,13 @@ def main() -> int:
           "environment is memory-feasible at every batch tried, including the largest "
           "(128); the binding constraint is wall-clock, not VRAM.")
 
-    out_path = Path("results/vram_bound.csv")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    if out_path.exists():
-        raise FileExistsError(f"{out_path} already exists, refusing to overwrite silently")
-    pd.DataFrame(rows).to_csv(out_path, index=False)
-    print(f"\nwrote {len(rows)} rows to {out_path}")
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if OUT_PATH.exists():
+        if compare_with_existing(rows, OUT_PATH) != 0:
+            return 1
+    else:
+        pd.DataFrame(rows)[SCHEMA].to_csv(OUT_PATH, index=False)
+        print(f"\nwrote {len(rows)} rows to {OUT_PATH.relative_to(_ROOT)}")
 
     # The argument rests on the materialised bound exceeding every measured
     # anchor, so that is checked rather than assumed.

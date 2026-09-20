@@ -1,0 +1,127 @@
+"""Run every analysis command from the README reproduction table and report.
+
+Each command is run from the repository root with the current interpreter.
+A command fails when it exits non-zero or, for a script that prints a
+``RESULT:`` line, when that line does not read ``RESULT: PASS``. The run
+stops with exit code 1 if any command failed, so a broken reproduction path
+is caught before a change is committed. Figure files rewritten by the
+scripts are listed for information; their bytes are not expected to match
+the committed files across matplotlib builds, so a rewritten figure is not a
+failure.
+
+Usage, from the repository root:
+    python src/reproduce_all.py            # every command in the table
+    python src/reproduce_all.py --tests    # also run the unit tests first
+    python src/reproduce_all.py --quiet    # summary only, no script output
+"""
+
+import argparse
+import hashlib
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+_FIGURES = _ROOT / "paper" / "figures"
+
+# One entry per row of the README reproduction table, in table order.
+COMMANDS: list[tuple[str, list[str]]] = [
+    ("AR(1) grid table and heatmap", ["src/analysis/analyze_synthetic.py"]),
+    ("ETTh1 and ECL tables and figure", ["src/analysis/analyze_realdata.py"]),
+    ("ETTh1 coupling-subgroup contrast", ["src/analysis/analyze_etth1_subgroup.py"]),
+    ("Leader-follower gamma sweep and slope", ["src/analysis/analyze_leader_follower.py"]),
+    ("Boundary patch-size table and heatmap", [
+        "src/analysis/analyze_boundary.py",
+        "results/results_boundary_p4_ci.csv",
+        "results/results_boundary.csv",
+        "results/results_boundary_p4_gamma0_complete.csv",
+        "results/results_boundary_p4_gamma03_complete.csv",
+        "results/results_boundary_p4_gamma06_complete.csv",
+        "results/results_boundary_p4_gamma09_complete.csv",
+    ]),
+    ("Selection-rule diagnostic and trajectories", ["src/analysis/analyze_overtrain.py"]),
+    ("Matched-compute control", ["src/analysis/analyze_equal_compute.py"]),
+    ("Cross-variate-head control", ["src/analysis/analyze_cd_head.py"]),
+    ("Block-covariance family", ["src/analysis/analyze_block_cov.py"]),
+    ("Block-wise attention ablation", ["src/analysis/analyze_block_attention.py"]),
+    ("P=4 boundary cells (all four gamma)", ["src/analysis/analyze_boundary_p4.py"]),
+    ("C=84 three-arm block-attention cell", ["src/analysis/analyze_boundary_c84.py"]),
+    ("Compute-versus-accuracy figure", [
+        "src/analysis/make_compute_accuracy_fig.py", "--outdir", "paper/figures",
+    ]),
+    ("Attention-memory bound and measured peak", ["src/analysis/derive_vram_bound.py"]),
+    ("Practical-equivalence summary", ["src/analysis/analyze_equiv_table.py"]),
+    ("Theoretical forecast-error ceilings", ["src/analysis/derive_theoretical_bounds.py"]),
+    ("Granger non-causality", ["src/analysis/validate_granger.py"]),
+]
+
+
+def _figure_digests() -> dict[str, str]:
+    if not _FIGURES.is_dir():
+        return {}
+    return {
+        p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(_FIGURES.iterdir()) if p.is_file()
+    }
+
+
+def _run(args: list[str], quiet: bool) -> tuple[int, str]:
+    proc = subprocess.run(
+        [sys.executable, *args], cwd=_ROOT, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
+    output = proc.stdout + ("\n" + proc.stderr if proc.stderr else "")
+    if not quiet:
+        print(output, end="" if output.endswith("\n") else "\n")
+    return proc.returncode, output
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--tests", action="store_true", help="run the unit tests first")
+    parser.add_argument("--quiet", action="store_true", help="print the summary only")
+    opts = parser.parse_args()
+
+    results: list[tuple[str, str, float]] = []
+    before = _figure_digests()
+
+    if opts.tests:
+        t0 = time.time()
+        code, output = _run(["-m", "pytest", "src/tests/", "-q"], opts.quiet)
+        results.append(("Unit tests", "PASS" if code == 0 else "FAIL", time.time() - t0))
+
+    for label, args in COMMANDS:
+        print(f"\n===== {label}: {' '.join(args)} =====")
+        t0 = time.time()
+        code, output = _run(args, opts.quiet)
+        if code != 0:
+            status = f"FAIL (exit {code})"
+        elif "RESULT:" in output and "RESULT: PASS" not in output:
+            status = "FAIL (RESULT line is not PASS)"
+        else:
+            status = "PASS"
+        results.append((label, status, time.time() - t0))
+
+    after = _figure_digests()
+    rewritten = sorted(k for k in after if before.get(k) != after[k])
+
+    width = max(len(r[0]) for r in results)
+    print("\n" + "=" * (width + 30))
+    print("REPRODUCTION SUMMARY")
+    print("=" * (width + 30))
+    for label, status, seconds in results:
+        print(f"{label:<{width}}  {status:<28}  {seconds:5.1f}s")
+    failed = [r for r in results if not r[1].startswith("PASS")]
+    if rewritten:
+        print(f"\nFigures rewritten (bytes changed, values are fixed by the CSVs): {', '.join(rewritten)}")
+    print(f"\n{len(results) - len(failed)}/{len(results)} passed")
+    if failed:
+        print("RESULT: FAIL")
+        return 1
+    print("RESULT: PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

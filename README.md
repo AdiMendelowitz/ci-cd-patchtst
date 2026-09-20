@@ -4,7 +4,7 @@ Code, data, and paper for a controlled study of channel-independent (CI) versus
 channel-dependent (CD) PatchTST on multivariate time-series forecasting.
 
 Published in Transactions on Machine Learning Research (2026). Reviewed on
-OpenReview: https://openreview.net/forum?id=aiUZ2y8UNl. See Citation below.
+OpenReview: <https://openreview.net/forum?id=aiUZ2y8UNl>. See Citation below.
 
 ## Summary
 
@@ -35,8 +35,8 @@ seeds, with a seed-clustered 95% confidence interval of [-0.0023, +0.0048]
 (+0.13% of the CI mean, inside the pre-specified 1% band). Separately, the per-cell 95%
 detection half-width is 0.0063 MSE, about 0.62% of the CI mean: the smallest
 per-cell mean difference whose interval would exclude zero, so any per-cell CD
-advantage, where present, is bounded below that half-width — a measured bound,
-not a mere failure to reject. A fair-protocol robustness suite,
+advantage, where present, is bounded below that half-width: a measured bound
+rather than a failure to reject. A fair-protocol robustness suite,
 consisting of an instrumented selection-rule diagnostic, matched
 gradient-update budgets, a cross-variate prediction head, and the
 block-covariance family, shows that the apparent CD deficit under lagged coupling
@@ -53,6 +53,8 @@ coupling strength.
 ```
 ci-cd-patchtst/
   README.md
+  CHANGELOG.md                what changed after the paper's code release
+  CITATION.cff
   mendelowitz2026equalaccuracy.pdf
                               the published paper (camera-ready PDF)
   LICENSE
@@ -69,6 +71,7 @@ ci-cd-patchtst/
     figures/                  PNGs referenced by main.tex, written by the
                               analysis scripts below
   src/
+    reproduce_all.py          runs every command of the reproduction table
     models.py                 PatchTST CI and CD modes, the PatchTST_CD_Head
                               cross-variate head, TrueDLinear, and build_model
     models_cd_block.py        block-wise cross-variate attention CD variant
@@ -99,6 +102,8 @@ ci-cd-patchtst/
       validate_granger.py           Granger non-causality battery
       partition_etth1_coupling.py   ETTh1 coupling-partition scoring (revision)
       paired_stats.py               shared paired-difference library
+    probes/                   T4 feasibility probes (P=2 boundary, ECL stage-0,
+                              block-attention dry run); measurement only
     tests/
       test_experiments.py
       test_cd_block.py
@@ -107,18 +112,20 @@ ci-cd-patchtst/
     original/                 original boundary training notebooks, retrieved
                               2026-08-04 (see Notebooks)
   results/                    committed result CSVs (see inventory)
+    SCHEMA.md                 every CSV, its writer and readers, every column
     logs/                     stdout logs of the ECL training sessions and the
                               P=2 feasibility probe
-  src/probes/                 T4 feasibility probes (P=2 boundary, ECL stage-0,
-                              block-attention dry run); measurement only
 ```
 
 The cross-variate head is the class `PatchTST_CD_Head` inside `src/models.py`.
 
 ## Installation
 
-Python 3.12 is the project standard (`requires-python >=3.12,<3.13`). With
-[uv](https://docs.astral.sh/uv/), from the repository root:
+Python 3.12 is the project standard: `requires-python >=3.12,<3.13` is the
+range `uv.lock` and the requirements files were resolved for, and the range the
+tests and the reproduction sweep were run on. The code uses no feature beyond
+3.12; later interpreters are not covered by the lock file. With [uv](https://docs.astral.sh/uv/), from the
+repository root:
 
 ```
 uv sync --all-groups
@@ -132,6 +139,7 @@ Without uv, create a Python 3.12 virtual environment and install with pip:
 ```
 python -m venv .venv
 .venv\Scripts\activate          # Windows
+source .venv/bin/activate       # macOS and Linux
 pip install -r requirements.txt
 pip install -r requirements-dev.txt   # test and lint tools
 ```
@@ -160,12 +168,52 @@ minimal machine without torch, the model tests skip automatically and the
 generator and paired-statistics tests still run, so the suite passes with
 skips reported and no failures.
 
+## Data
+
+The two real-world datasets are not redistributed here; the notebooks read
+them from a Kaggle input path and the split conventions are fixed in code.
+
+ETTh1 is the hourly file of the ETT-small collection released with Informer
+(Zhou et al., AAAI 2021) at <https://github.com/zhouhaoyi/ETDataset>, whose
+LICENSE file is CC BY-ND 4.0. The notebooks read `ETTh1.csv` (17,420 rows,
+7 variates after the date column) and use the standard fixed split of
+8,640 / 2,880 / 2,880 rows (`TRAIN_END = 8640`, `VAL_END = 11520` in
+`train_etth1.ipynb` and `train_etth1_b4.ipynb`).
+
+ECL is the 321-client hourly `electricity.csv` distributed with the
+Autoformer, Time-Series-Library and iTransformer repositories (THUML), derived
+from the UCI ElectricityLoadDiagrams20112014 dataset (Trindade, 2015,
+<https://doi.org/10.24432/C58C86>, CC BY 4.0; 370 clients at 15-minute
+resolution in the original). The ECL notebook applies the iTransformer
+proportions to the row count it finds (`train_end = int(n * 0.6012)`,
+`val_end = train_end + int(n * 0.1995)`), which on the 26,304-row file used
+gives 15,813 / 5,247 / 5,244 rows; the paper's dataset section records the
+26,304 versus 26,352 row-count difference against the iTransformer paper.
+
+Both datasets are z-scored per channel with statistics fitted on the training
+split only. The two scripts that read the raw files locally,
+`src/analysis/measure_lag_structure.py` (expects `data/ETTh1.csv` and
+`data/electricity.csv` under the repository root) and
+`src/analysis/partition_etth1_coupling.py` (takes the ETTh1 path as an
+argument), write the committed summary files in `results/`; nothing in the
+reproduction table needs the raw data.
+
 ## Reproducing the paper
 
 Every table and figure is recomputed from a committed CSV in `results/` by one
-analysis script. Run each from the repository root. The scripts carry the numbers
-and print them on each run, so this README does not restate result values that
-could drift from the paper. Figure-producing scripts write their PNG into
+analysis script. To run the whole table at once, from the repository root:
+
+```
+python src/reproduce_all.py --tests
+```
+
+This runs the unit tests and then every command below, fails on any non-zero
+exit or any `RESULT:` line that is not `PASS`, and ends with a summary; a full
+run takes under a minute on CPU. The individual commands follow, each run from
+the repository root. The scripts carry the numbers and print them on each run,
+so the table does not restate result values that could drift from the paper
+(the Key result section above quotes the headline figures; the scripts are the
+source). Figure-producing scripts write their PNG into
 `paper/figures/`; the plotted values are fixed by the committed CSVs, but the
 PNG bytes vary across matplotlib and font-rendering builds, so a regenerated
 figure is not expected to be byte-identical to the committed one. Paper-position references below name the content rather than
@@ -196,7 +244,8 @@ states the exact table/figure label it feeds.
 
 `results/` holds every analysis-input CSV, each the committed input to one
 analysis script (`equiv_summary.csv`, `theoretical_bounds.csv` and `vram_bound.csv` are
-script outputs, committed for reference):
+script outputs, committed for reference). `results/SCHEMA.md` documents every
+column of every file:
 
 - `results_grid.csv` -- AR(1) grid
 - `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL
@@ -215,7 +264,7 @@ script outputs, committed for reference):
 - `theoretical_bounds.csv` -- closed-form CI/CD forecast-error ceilings
 - `vram_bound.csv` -- materialised-attention memory bound at ECL scale against the measured peak
 - `realdata_corr_summary.csv`, `realdata_lag_summary.csv` -- ETTh1 and ECL contemporaneous-correlation and lag-structure summaries written by `measure_lag_structure.py` and read by `analyze_realdata.py`
-- `stage0_ecl_check.csv` -- ECL stage-0 feasibility probe output (`src/probes/dryrun_stage0.py`)
+
 `results/logs/` carries the stdout logs of the completed ECL CI/CD training
 sessions (`ecl_ci_cd_train_resumable_v*_stdout.txt`), the provenance for the
 paper's per-epoch cost figures, and the P=2 feasibility probe log
@@ -267,7 +316,9 @@ records each file's role and SHA256 and the shared protocol. The three generator
 ## Citation
 
 `CITATION.cff` at the repository root carries the same reference for GitHub's
-"Cite this repository" button.
+"Cite this repository" button. The paper cites release `v1.0-tmlr`, the state
+of the repository at camera-ready submission; later releases are listed in
+`CHANGELOG.md` and never move that tag.
 
 ```
 @article{mendelowitz2026equalaccuracy,
