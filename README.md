@@ -214,6 +214,8 @@ script outputs, committed for reference):
 - `results_grid_C84_block_attn.csv` -- C=84 three-arm cell
 - `theoretical_bounds.csv` -- closed-form CI/CD forecast-error ceilings
 - `vram_bound.csv` -- materialised-attention memory bound at ECL scale against the measured peak
+- `realdata_corr_summary.csv`, `realdata_lag_summary.csv` -- ETTh1 and ECL contemporaneous-correlation and lag-structure summaries written by `measure_lag_structure.py` and read by `analyze_realdata.py`
+- `stage0_ecl_check.csv` -- ECL stage-0 feasibility probe output (`src/probes/dryrun_stage0.py`)
 `results/logs/` carries the stdout logs of the completed ECL CI/CD training
 sessions (`ecl_ci_cd_train_resumable_v*_stdout.txt`), the provenance for the
 paper's per-epoch cost figures, and the P=2 feasibility probe log
@@ -226,9 +228,10 @@ T4 GPU, that produced the result CSVs: leader-follower, ETTh1 (original and
 matched-budget rerun), ECL (CI/CD resumable), DLinear, cross-variate head,
 equal compute, block covariance, the block-wise cross-variate attention
 ablation (including its single-cell C=84 AR(1)-grid variant,
-`train_grid_c84_block_attn.ipynb`), and the boundary P=4 gamma-sweep slices
-with their config files. The AR(1) grid's own training notebook is not among
-them (its generator is committed under `src/generators/`); the boundary sweep's original
+`train_grid_c84_block_attn.ipynb`), the AR(1) grid's extra-seed run
+(`train_grid_extra_seeds.ipynb`, seeds {789, 1011}; see Reproducing from
+scratch for how it relates to the original three seeds), and the boundary P=4
+gamma-sweep slices with their config files. The boundary sweep's original
 notebooks are committed separately under `notebooks/original/` (see
 Reproducing from scratch).
 
@@ -238,12 +241,15 @@ Reproducing every table and figure from the committed CSVs needs only the analys
 scripts above and the CPU stack installed by `uv sync` or the requirements files.
 Retraining the models from raw synthetic data is partially supported. The
 training notebooks under `notebooks/` retrain the experiments listed above on a
-single T4. The AR(1) grid is the exception: its generator is committed as
-`src/generators/generate_ar1_grid.py` (the module that produced the series
-for seeds {42, 123, 456}; seeds {789, 1011} used the same process at 14,400
-usable timesteps, as the paper's protocol table records), but its training
-notebook is not, so that experiment's data can be regenerated while the
-training runs themselves reproduce only from the committed CSVs. The boundary
+single T4. The AR(1) grid has two provenance paths: seeds {42, 123, 456} were
+trained from series produced by `src/generators/generate_ar1_grid.py` (13,400
+usable timesteps) in a notebook that is not committed, and seeds {789, 1011}
+by `notebooks/train_grid_extra_seeds.ipynb`, which carries an inline
+implementation of the same process at 14,400 usable timesteps (the paper's
+protocol table records both lengths). The two implementations draw their
+innovations differently, so they realise the same process from different
+random streams; the notebook retrains the grid for any seed list and series
+length but does not reproduce the original three seeds' rows bit for bit. The boundary
 patch-size sweep's original training notebooks were retrieved on 2026-08-04
 from the Kaggle environment in which they ran and are committed byte-identical
 under `notebooks/original/` (`train_boundary_*.ipynb`); they are
