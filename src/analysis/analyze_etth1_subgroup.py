@@ -1,4 +1,4 @@
-"""ETTh1 coupling-subgroup analysis (TMLR revision, reviewer-requested).
+"""ETTh1 coupling-subgroup analysis.
 
 Reads the rerun of the committed ETTh1 protocol (CI and CD at horizons
 {96, 192, 336, 720}, seeds {42, 123, 456, 789, 1011}; 40 aggregate rows and

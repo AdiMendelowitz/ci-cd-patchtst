@@ -29,7 +29,7 @@ Both CSVs share the schema:
 
 Writes
 ------
-Results/figures/boundary_heatmap.png
+paper/figures/boundary_heatmap.png
     Partial (P, gamma) grid of the CD/CI MSE ratio at every patch size where both
     modes were run. Cells where CD was not run are grey N/A. The colour range is
     data-driven (max observed deviation times 1.1, floor 0.002).
@@ -43,10 +43,9 @@ seed-clustered refit; and a ready-to-paste LaTeX paragraph.
 
 Paths
 -----
-The script is assumed to live in time-series-forecasting/paper/, with the result
-CSVs under results/ at the repository root and figures written to paper/figures/.
-Both default paths are resolved against those
-candidate directories; pass explicit paths to override:
+Result CSVs are read from results/ at the repository root and the figure is
+written to paper/figures/, both resolved relative to this file; pass explicit
+paths to override:
 
     python analyze_boundary.py [p4_ci.csv boundary.csv [p4_complete.csv ...]]
 

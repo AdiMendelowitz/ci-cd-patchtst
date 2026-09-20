@@ -185,15 +185,14 @@ states the exact table/figure label it feeds.
 | Compute-versus-accuracy figure | `python src/analysis/make_compute_accuracy_fig.py --outdir paper/figures` | `results/results_leader_follower.csv`, `results/results_grid.csv` | writes `paper/figures/compute_accuracy.png` |
 | Attention-memory bound and measured peak | `python src/analysis/derive_vram_bound.py` | architecture constants and the measured peak allocations recorded in the script | materialised-attention bound at ECL scale against the measured peak; writes `results/vram_bound.csv` |
 | Practical-equivalence summary | `python src/analysis/analyze_equiv_table.py` | `results/results_grid.csv`, `results_cd_head.csv`, `results_overtrain_summary.csv`, `results_equal_compute.csv`, `results_block_cov.csv` | recomputes all twelve equivalence rows with mean and CI oracle checks; writes `results/equiv_summary.csv` |
-| Theoretical forecast-error ceilings | `python src/analysis/derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; writes `results/theoretical_bounds.csv` |
+| Theoretical forecast-error ceilings | `python src/analysis/derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; compares against the committed `results/Revision/theoretical_bounds.csv` and writes it only if absent |
 | Granger non-causality | `python src/analysis/validate_granger.py` | generates data internally | Granger non-causality battery (console only) |
 
 ## Results CSV inventory
 
 `results/` holds the analysis-input CSVs below, each the committed input to one
-analysis script (`equiv_summary.csv` and `theoretical_bounds.csv` are script
-outputs, committed for reference), plus revision-era files noted after the
-list:
+analysis script (`equiv_summary.csv` is a script output, committed for
+reference), plus revision-era files noted after the list:
 
 - `results_grid.csv` -- AR(1) grid
 - `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL
@@ -204,7 +203,6 @@ list:
 - `results_cd_head.csv` -- cross-variate-head control
 - `results_block_cov.csv` -- block-covariance family
 - `equiv_summary.csv` -- practical-equivalence summary
-- `theoretical_bounds.csv` -- closed-form CI/CD forecast-error ceilings
 - `etth1_coupling_partition.csv` -- ETTh1 window coupling scores
 
 Revision-era result CSVs live under `results/Revision/`:

@@ -1,7 +1,7 @@
 """Unit tests for the block-wise cross-variate attention CD variant.
 
-Run from the directory holding models_cd_block.py:
-    python -m pytest test_cd_block.py -q
+Run from the repository root:
+    python -m pytest src/tests/test_cd_block.py -q
 """
 
 import pytest

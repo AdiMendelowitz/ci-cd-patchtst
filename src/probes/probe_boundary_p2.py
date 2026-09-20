@@ -3,7 +3,7 @@
 # that define: generate, split_and_normalise, WindowDataset, M (import models),
 # LOOKBACK, PRED_LEN, N_TOTAL, D_MODEL, N_HEADS, N_LAYERS, DROPOUT, DEVICE).
 # It measures peak CUDA memory, per-step compute time, and confirms
-# steps_per_epoch for a P=2 CD run at batch 64 BEFORE any weekly quota is spent.
+# steps_per_epoch for a P=2 CD run at batch 64 before a full run is launched.
 # Console only; nothing is trained to completion and no file is written.
 import time
 import torch

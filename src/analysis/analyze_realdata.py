@@ -49,8 +49,8 @@ Statistical notes
 -----------------
 ETTh1 uses a budget matched across modes: batch size 32 and warmup_epochs 10 for both CI and CD, with a 15-epoch
 minimum before early stopping. CI and CD therefore run an identical number of gradient updates per epoch at each
-horizon, so neither the step count nor the warmup schedule can account for any CI-CD difference. The earlier
-confounded run (ci_cd_etth1_raw_with_budget.csv: CI batch 128 vs CD batch 32, CI warmup 10 vs CD warmup 2) is retired.
+horizon, so neither the step count nor the warmup schedule can account for any CI-CD difference. An earlier
+run with unmatched batch sizes and warmup schedules is not used.
 
 With n=5 seeds per horizon (df=4, t-critical=2.776) the paired CD-CI differences are tested per horizon and pooled.
 CD never attains a significant advantage; CI is significantly better at H=96 and H=720, and the pooled difference
@@ -118,12 +118,9 @@ _ECL_ARCH_VERSION = 2  # Architecture revision matching the committed models.py.
 # Oracle targets for realdata_corr_summary.csv, quoted from main.tex Section 3.2
 # ("Correlation and lead-lag structure"). Each tuple is
 # (lag0_mean_abs_r, lag0_median_abs_r, mean_max_over_lags, pct_pairs_gain).
-# Pinned from a run against the current data files under the corrected ECL
-# split (train_rows=15813, fixing an earlier 15,840 row-count error in the
-# now-retired sandbox version of measure_lag_structure.py). Verified by hand
-# against main.tex on 18 Aug 2026: every figure the paper states rounds to
-# these values at the precision it reports them, so the earlier row-count
-# error did not change any number actually printed in the paper.
+# Pinned from a run against the current data files under the ECL split
+# train_rows=15813; every figure the paper states rounds to these values at
+# the precision it reports them.
 _ORACLE_CORR: dict[str, tuple[float, float, float, float] | None] = {
     "ETTh1": (0.311013, 0.232797, 0.349276, 42.86),
     "ECL": (0.502687, 0.482602, 0.596492, 49.09),

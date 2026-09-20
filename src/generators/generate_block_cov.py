@@ -1,4 +1,4 @@
-"""Block-diagonal-covariance AR(1) data generator for experiment 3.
+"""Block-diagonal-covariance AR(1) data generator for the covariance-family control.
 
 Purpose
 -------

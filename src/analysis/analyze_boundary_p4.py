@@ -1,8 +1,8 @@
 """Analysis: P=4 CD vs CI in the current environment.
 
 The paired contrast, the cross-environment CI reproducibility measurement,
-the paste-ready effect-size row (tab:equiv schema) plus a tab:boundary note,
-and a frozen oracle are wired to the executed CSV(s). The script exits 0
+the effect-size row in the tab:equiv schema, and a frozen oracle are wired
+to the executed CSV(s). The script exits 0
 only when every number reproduces the oracle recomputed from the file(s) of
 record; any drift in _ORACLE_PAIRED exits 1; a gamma absent from _ORACLE_REPRO
 is a cross-environment measurement with no old-env reference and is skipped, not failed.
@@ -32,10 +32,8 @@ Paths
 -----
 Candidate directories resolve against the repository root (first parent holding a
 results/ directory), so the script runs from any CWD. The boundary P=4 folder is
-discovered under results/Revision/ preferring the correctly-spelled
-train_boundary_p4_temp, falling back to a train_bound*_p4 glob (covers the known local
-"train_boundary_p4" typo; that typo must never reach a
-committed path). Explicit paths override discovery entirely:
+discovered under results/Revision/ as train_boundary_p4, with a train_bound*_p4
+glob as the fallback. Explicit paths override discovery entirely:
 
     python analyze_boundary_p4.py [new_csv ...] [--ci-ref committed_p4_ci.csv]
 
@@ -55,16 +53,12 @@ one-sided sign test (alternative: CD worse than CI). Seed count per cell is read
 from the data. The committed CI-only rows enter a separate environment-comparison
 measurement (per-gamma CI means, old vs new), never the paired test.
 
-Outputs (all human-gated for main.tex)
---------------------------------------
-One effect-size row per gamma in tab:equiv / equiv_summary.csv schema, and a note
-on the corresponding tab:boundary row: in the current environment CD is feasible,
-so that cell can carry a CD/CI ratio rather than a CI-only value, and the table
-caption's "CD exceeds T4 memory" no longer holds at that patch size. Whether either
-edit lands in main.tex is a paper decision, not the script's; the script only
-supplies the numbers and flags the mixed-environment caveat. Each pasted row's
-source_csv field names the actual input file(s) used for that run, not a fixed
-constant.
+Outputs
+-------
+One effect-size row per gamma in the tab:equiv / equiv_summary.csv schema. The
+P=4 ratios these rows carry are the ones printed in tab:boundary; the rows are
+not part of tab:equiv, which pools no mixed-environment cells. Each row's
+source_csv field names the actual input file(s) used for that run.
 
 Protocol identity oracle
 ------------------------
@@ -72,9 +66,8 @@ Every new row must carry batch_size=128, steps_per_epoch=104, patch_size=4,
 C=21 (the committed boundary windowing); a row failing this is a protocol break
 and the script refuses to analyse. Every gamma present in the unioned input must
 have a paired-oracle entry in _ORACLE_PAIRED or the run exits 1 (untested-cell
-guard) — add the entry once new numbers are verified by hand, per this project's
-standing analysis-before-results discipline; the script never grades its own
-freshly-computed numbers as correct by default.
+guard); the entry is added once new numbers are verified by hand, so the script
+never grades its own freshly computed numbers as correct by default.
 """
 
 import argparse
@@ -91,7 +84,7 @@ EXPECTED_BATCH = 128
 EXPECTED_P = 4
 EXPECTED_C = 21
 NEW_CSV_NAME = "results_boundary_p4_complete.csv"
-THRESHOLD_PCT = 1.0  # pre-registered practical-equivalence band, percent of CI mean.
+THRESHOLD_PCT = 1.0  # pre-specified practical-equivalence band, percent of CI mean.
 
 SCHEMA = ["dataset", "C", "rho", "gamma", "patch_size", "mode", "seed",
           "test_mse", "test_mae", "best_epoch", "batch_size",
@@ -139,8 +132,8 @@ def repo_root() -> Path:
 
 def _warn_if_diverged(preferred: Path, revision_root: Path, filename: str) -> None:
     """Flag byte-level disagreement between the preferred boundary-P4 folder and
-    any typo'd sibling holding the same filename. The two have been observed to
-    drift in this project (2026-08-16); silently preferring one is not safe."""
+    any sibling folder holding the same filename, so a stale copy is never
+    preferred silently."""
     for other in sorted(revision_root.glob("train_bound*_p4")):
         if other == preferred:
             continue
@@ -153,13 +146,11 @@ def _warn_if_diverged(preferred: Path, revision_root: Path, filename: str) -> No
 def boundary_p4_root(root: Path) -> Path:
     """Locate the boundary P=4 results folder under results/Revision/.
 
-    Prefers the correctly-spelled train_boundary_p4_temp. Falls back to a
-    train_bound*_p4 glob so a local "train_boundary_p4" typo (must never
-    reach a committed path) does not break default
-    resolution — but fails loudly rather than silently guessing if the glob
-    is ambiguous or empty.
+    Prefers train_boundary_p4, the committed folder. Falls back to a
+    train_bound*_p4 glob, failing loudly rather than guessing if the glob is
+    ambiguous or empty.
     """
-    exact = root / "results" / "Revision" / "train_boundary_p4_temp"
+    exact = root / "results" / "Revision" / "train_boundary_p4"
     if exact.is_dir():
         _warn_if_diverged(exact, root / "results" / "Revision", NEW_CSV_NAME)
         return exact
@@ -169,7 +160,7 @@ def boundary_p4_root(root: Path) -> Path:
     if not matches:
         raise FileNotFoundError(
             "no train_bound*_p4 folder found under results/Revision/ "
-            "(expected train_boundary_p4_temp; pass an explicit CSV path if the "
+            "(expected train_boundary_p4; pass an explicit CSV path if the "
             "local folder uses a different name)")
     raise FileNotFoundError(
         f"ambiguous boundary P=4 folder — found {matches}; pass an explicit "
@@ -193,8 +184,8 @@ def resolve_csv(filename: str, rel_candidates: tuple[str, ...],
 
 
 def default_new_csv() -> Path:
-    """Legacy single-file default, typo-tolerant: the gamma-0.9 file of
-    record if no new-CSV paths are given on the command line."""
+    """Legacy single-file default: the gamma-0.9 file of record if no new-CSV
+    paths are given on the command line."""
     return boundary_p4_root(repo_root()) / NEW_CSV_NAME
 
 
@@ -315,8 +306,8 @@ def repro_table(new: pd.DataFrame, old_ci: pd.DataFrame) -> pd.DataFrame:
 
 
 def paste_fragments(paired: pd.DataFrame, source_label: str) -> str:
-    """Human-gated paste material: an equiv-schema effect-size row and a
-    tab:boundary note. Neither is applied to main.tex by this script.
+    """Effect-size rows in the equiv_summary.csv schema and their rendered
+    LaTeX form, for cross-checking against the paper.
 
     source_label names the actual input file(s) analysed this run."""
     lines = []
@@ -332,15 +323,12 @@ def paste_fragments(paired: pd.DataFrame, source_label: str) -> str:
             f'Leader-follower,"{cell}",early-stop,{source_label},test_mse,CD-CI,'
             f"{r['cd_minus_ci']:.4f},{r['ci_lo']:.4f},{r['ci_hi']:.4f},"
             f"{r['rel_pct']:.2f},{bool(r['within_threshold'])},{int(r['n'])}")
-        lines.append("# rendered tab:equiv row (current environment; adoption is a paper decision):")
+        lines.append("# rendered row, tab:equiv format (current environment; not part of tab:equiv):")
         lines.append(
             f"Leader-follower & {cell} & early-stop & "
             f"${r['cd_minus_ci']:+.4f}$ & ${r['rel_pct']:+.2f}\\%$ & {flag} \\\\{note}")
-        lines.append("# tab:boundary note: at P=4 CD is feasible in the current environment, so the")
-        lines.append(f"#   ($P{{=}}4$, $\\gamma = {r['gamma']:.1f}$) cell can carry a CD/CI ratio "
-                     f"{r['ratio']:.4f} (curr.-env CI {r['ci_mean']:.4f}, CD {r['cd_mean']:.4f})")
-        lines.append("#   rather than the CI-only entry now shown; the caption clause")
-        lines.append("#   \"CD exceeds T4 memory\" no longer holds at P=4.")
+        lines.append(f"# tab:boundary cell ($P{{=}}4$, $\\gamma = {r['gamma']:.1f}$): CD/CI ratio "
+                     f"{r['ratio']:.4f} (CI {r['ci_mean']:.4f}, CD {r['cd_mean']:.4f})")
     return "\n".join(lines)
 
 
@@ -460,7 +448,7 @@ def main(argv: list[str]) -> int:
         print(f"  gamma={r['gamma']:.1f}: new-env CI {new_s}  old-env CI {r['old_ci']:.4f}  "
               f"delta {delta_s}  (old-env 95% half-width {r['old_halfwidth']:.4f})")
 
-    print("\n=== PASTE MATERIAL (human-gated; not applied to main.tex) ===")
+    print("\n=== EFFECT-SIZE ROWS (equiv_summary.csv schema) ===")
     print(paste_fragments(paired, source_label))
 
     print("\n=== ORACLE CHECK (recomputed from the file(s) of record) ===")

@@ -1,8 +1,6 @@
 """Merge boundary P=4 slices for one gamma into the file of record.
 
-Generalizes merge_boundary_p4_gamma0.py and merge_boundary_p4_gamma06.py
-(both superseded by this script) into a single implementation taking gamma
-as a parameter, rather than a third near-identical copy for gamma=0.3.
+Takes gamma as a parameter so one implementation serves every gamma tranche.
 
 Reads every results_boundary_p4*.csv found anywhere under the boundary_p4
 results root, EXCLUDING any prior *_complete.csv (an output of this script
@@ -10,11 +8,8 @@ or a sibling gamma's run, never a source slice) and results_boundary_p4_ci.csv
 (a distinct, already-provenanced historical artifact, not a slice output --
 see the _EXCLUDED_NAMES comment below). Slices are discovered by
 file location rather than by a hardcoded per-gamma tag list, since slice
-folder naming has not been consistent across gamma tranches (gamma0_a1/2/3,
-gamma06_s1/2/3, and gamma-0.3's own naming may differ again) -- discovering
-by glob and filtering by the row data itself is correct regardless of
-naming, and does not need updating if a future gamma tranche picks yet
-another slice-naming convention.
+folder naming differs across gamma tranches; discovering by glob and
+filtering by the row data itself is correct regardless of naming.
 
 Each discovered file's rows are filtered to the target gamma before any
 validation runs, so a slice folder that happens to hold more than one
@@ -44,7 +39,7 @@ Usage
 
 Writes
 ------
-results/Revision/train_bound*_p4/results_boundary_p4_gamma<tag>_complete.csv
+results/Revision/train_boundary_p4/results_boundary_p4_gamma<tag>_complete.csv
     <tag> follows the established naming: 0 -> "0", 0.3 -> "03",
     0.6 -> "06", 0.9 -> "09" (the single post-decimal digit, zero-padded to
     two characters, except gamma=0 itself which keeps the pre-existing
@@ -114,9 +109,7 @@ def validate_protocol_identity(df: pd.DataFrame, gamma: float, source: str) -> N
 
 
 def discover_p4_root(results_root: Path) -> Path:
-    """Locate the boundary_p4 parent regardless of the "boundary"/"boundry"
-    spelling on disk (a known local folder typo; committed paths do not
-    carry it)."""
+    """Locate the boundary_p4 parent folder under the results root."""
     candidates = [p for p in results_root.glob("train_bound*_p4") if p.is_dir()]
     if len(candidates) != 1:
         raise FileNotFoundError(
@@ -133,9 +126,7 @@ def discover_p4_root(results_root: Path) -> Path:
 # per-slice training output. If it ever sits anywhere under p4_root, its
 # rows could pass gamma-filtering and protocol-identity checks and get
 # silently absorbed into a merge as if it were a slice's contribution --
-# excluded by name here rather than relying on directory scoping alone,
-# since the real slice-folder layout for any given gamma has not been
-# independently confirmed.
+# excluded by name here rather than relying on directory scoping alone.
 _EXCLUDED_NAMES = {"results_boundary_p4_ci.csv"}
 
 

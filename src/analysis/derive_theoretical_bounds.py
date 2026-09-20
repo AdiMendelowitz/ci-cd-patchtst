@@ -34,8 +34,7 @@ Followers are reported three ways across the full horizon sweep:
 
   1. CD bound: the unrestricted ceiling [Sigma_h]_ii / stationary variance.
   2. CI bound: the own-history-only ceiling, computed exactly (below).
-  3. Sandwich width: 1.0 - CD bound, retained from the earlier revision of
-     this script for continuity with material already produced from it.
+  3. Sandwich width: 1.0 - CD bound, retained as a diagnostic.
 
 The sandwich width upper-bounds the CI-CD gap but does not estimate it. Its
 upper limit of 1.0 is the no-signal ceiling, not the CI-restricted ceiling,

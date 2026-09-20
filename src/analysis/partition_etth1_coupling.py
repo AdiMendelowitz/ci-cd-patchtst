@@ -25,7 +25,7 @@ train-normalised series exactly as the model sees it.
 
 On the ETTh1 test split the two rank windows in near-opposite order (Spearman
 about -0.28), so the choice is substantive, not cosmetic. diffed is the
-pre-registered primary metric because the paper's question is about dynamical
+primary metric, chosen before the error data existed, because the paper's question is about dynamical
 (lagged) coupling, not instantaneous correlation; raw is reported as a
 robustness column.
 
@@ -34,7 +34,7 @@ across window starts (about 0.97 at a 24-step offset), so a median split yields
 contiguous time blocks and any subgroup gap is partially confounded with
 regime. Downstream inference aggregates errors to run level per subset before
 the usual per-seed pairing, which handles window dependence; the regime
-confound is a limitation to report, not to hide.
+confound is reported as a limitation.
 
 Splits
 ------

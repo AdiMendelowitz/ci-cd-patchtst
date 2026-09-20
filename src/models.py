@@ -1,7 +1,7 @@
-"""PatchTST models for experiment 1 (head-bottleneck control).
+"""PatchTST models: CI, CD, the cross-variate-head control, and DLinear.
 
 The channel-independent (CI) and channel-dependent (CD) classes reproduce the
-keystone notebook train_leader_follower exactly: a Linear patch embedding with no
+training notebook train_leader_follower exactly: a Linear patch embedding with no
 positional encoding, patches taken by unfold with no padding so that
 N = (seq_len - patch_size) // stride + 1, an nn.TransformerEncoder built from
 nn.TransformerEncoderLayer (post-norm, ReLU feed-forward, dim_feedforward =
@@ -19,9 +19,8 @@ context is concatenated to the variate's flattened encoder output before the
 shared projection. The encoder is identical to PatchTST_CD, so any difference in
 results is attributable to the head alone.
 
-This deliberately avoids the global head Linear(C * N * D, pred_len * C) that
-failed catastrophically in earlier runs (it could not train and stopped at epoch
-one); the pooled-context head keeps the parameter count near the canonical head
+This deliberately avoids the global head Linear(C * N * D, pred_len * C) which
+did not train in preliminary runs (early stopping fired at epoch one); the pooled-context head keeps the parameter count near the canonical head
 and remains trainable.
 
 All three PatchTST classes take (B, seq_len, C) and return (B, pred_len, C).
@@ -53,7 +52,7 @@ def num_patches(seq_len: int, patch_size: int, stride: int) -> int:
 class PatchEmbedding(nn.Module):
     """Linear patch projection with dropout and no positional encoding.
 
-    Matches the keystone notebook: positional information is not added, which is
+    Matches the training notebooks: positional information is not added, which is
     part of the flattened-token CD behaviour under study.
     """
 

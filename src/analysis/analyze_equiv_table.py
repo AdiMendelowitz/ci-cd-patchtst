@@ -1,6 +1,6 @@
-"""Recompute Table 8 (``tab:equiv``) practical-equivalence effect sizes.
+"""Recompute Table 10 (``tab:equiv``) practical-equivalence effect sizes.
 
-Each row of Table 8 in "Equal Accuracy, Unequal Cost: Channel Dependence in
+Each row of Table 10 in "Equal Accuracy, Unequal Cost: Channel Dependence in
 PatchTST under Controlled Coupling" is a CD-CI (or CD_Head-CI) test-MSE effect
 size for one controlled cell under one selection rule. Cells under different
 rules are never pooled; every row is recomputed independently from its own
@@ -36,17 +36,15 @@ only the CI width changes. Any new row that pools more than one cell should
 set clustered=True and justify it in this comment the same way.
 
 The val-minimum row reads test_upd_global (best validation update), not
-test_epoch_global. An earlier row specification cited results_block_cov_v2.csv
-with the C=84 rho_in=0.9 cell at n=1; the canonical results_block_cov.csv is
-the n=5 cut, which gives +0.0000 as in main.tex.
+test_epoch_global. The canonical results_block_cov.csv is the n=5 cut, which
+gives +0.0000 for the C=84 rho_in=0.9 cell as in main.tex.
 
 Every row also carries a frozen oracle CI (oracle_ci_lo/oracle_ci_hi, 4 dp,
 taken from the committed equiv_summary.csv / main.tex at the time the row was
 last verified by hand) alongside the existing point-estimate oracle. The
 point-estimate check alone cannot catch a wrong CI, since clustering changes
-only the interval, not the mean -- that blind spot is exactly how the AR(1)
-grid row's stale, unclustered CI went undetected. Both checks must pass for a
-row to report PASS.
+only the interval, not the mean. Both checks must pass for a row to report
+PASS.
 
 Run from a clean checkout:
 
@@ -64,12 +62,12 @@ import paired_stats as ps  # noqa: E402  (sibling module; on sys.path when run a
 
 _ROOT = Path(__file__).resolve().parents[2]
 _RESULTS_DIR = _ROOT / "results"
-_THRESHOLD_PCT = 1.0  # pre-registered practical-equivalence band, percent of CI mean.
+_THRESHOLD_PCT = 1.0  # pre-specified practical-equivalence band, percent of CI mean.
 
 
 @dataclass(frozen=True)
 class RowSpec:
-    """One Table 8 row and how to recompute it from a canonical CSV.
+    """One Table 10 row and how to recompute it from a canonical CSV.
 
     Attributes:
         family: LaTeX family label (column 1).
@@ -305,7 +303,7 @@ def _load_cached(results_dir: Path, name: str, cache: dict[str, pd.DataFrame]) -
 
 
 def compute_row(spec: RowSpec, results_dir: Path, cache: dict[str, pd.DataFrame]) -> dict[str, object]:
-    """Recompute one Table 8 row from its source CSV.
+    """Recompute one Table 10 row from its source CSV.
 
     Args:
         spec: The row specification.
@@ -367,20 +365,20 @@ def compute_row(spec: RowSpec, results_dir: Path, cache: dict[str, pd.DataFrame]
 
 
 def build_table(results_dir: Path) -> pd.DataFrame:
-    """Recompute every Table 8 row.
+    """Recompute every Table 10 row.
 
     Args:
         results_dir: Directory holding the canonical CSVs.
 
     Returns:
-        One row per Table 8 entry, in display order.
+        One row per Table 10 entry, in display order.
     """
     cache: dict[str, pd.DataFrame] = {}
     return pd.DataFrame([compute_row(spec, results_dir, cache) for spec in _ROWS])
 
 
 def to_latex(table: pd.DataFrame) -> str:
-    """Render the recomputed table as the Table 8 ``tabular`` body.
+    """Render the recomputed table as the Table 10 ``tabular`` body.
 
     Args:
         table: Output of build_table.
@@ -410,7 +408,7 @@ def to_latex(table: pd.DataFrame) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Recompute Table 8, write equiv_summary.csv, and print the LaTeX body.
+    """Recompute Table 10, write equiv_summary.csv, and print the LaTeX body.
 
     Args:
         argv: Optional argument vector (defaults to sys.argv).
@@ -419,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code: 0 if every row matches both its oracle point
         estimate and its oracle CI at 4 dp, else 1.
     """
-    parser = argparse.ArgumentParser(description="Recompute Table 8 practical-equivalence effect sizes.")
+    parser = argparse.ArgumentParser(description="Recompute Table 10 practical-equivalence effect sizes.")
     parser.add_argument("--results-dir", type=Path, default=_RESULTS_DIR, help="Directory of canonical CSVs.")
     parser.add_argument(
         "--out-csv",
@@ -448,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     table[out_cols].to_csv(args.out_csv, index=False, encoding="utf-8")
 
-    print("=== TABLE 8 PER-ROW RECOMPUTE (CD-CI test MSE) ===")
+    print("=== TABLE 10 PER-ROW RECOMPUTE (CD-CI test MSE) ===")
     for _, r in table.iterrows():
         status = "PASS" if r["match"] else "FAIL"
         ci_flag = "" if r["ci_match"] else "  [CI MISMATCH]"

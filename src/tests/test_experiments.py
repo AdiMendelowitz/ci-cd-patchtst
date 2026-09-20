@@ -1,4 +1,4 @@
-"""Unit tests for the experiment 1-3 additions.
+"""Unit tests for the generators, paired statistics, and models.
 
 Generator and statistics tests run anywhere numpy and scipy are present. Model
 tests exercise src/models.py and require torch; they are skipped automatically

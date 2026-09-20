@@ -1,4 +1,4 @@
-"""Experiment 2 analysis: equal-compute CI vs CD.
+"""Matched-update-budget control: equal-compute CI vs CD.
 
 Reads
 -----
@@ -14,8 +14,8 @@ derived from the statistics rather than asserted.
 
 Purpose
 -------
-In the canonical runs CD takes many more gradient updates per epoch than CI (up to 32x at C=84), so a sceptic could
-argue the apparent CD deficit reflects CD over- or under-training rather than an architectural fact. This experiment
+In the canonical runs CD takes many more gradient updates per epoch than CI (up to 32x at C=84), so it could be
+argued that the apparent CD deficit reflects CD over- or under-training rather than an architectural fact. This experiment
 fixes the total update budget U identical for both modes, with an identical update-based schedule and best-validation
 checkpointing, and asks whether the deficit survives.
 
@@ -33,7 +33,7 @@ import paired_stats as ps
 
 _RESULTS_PATH = Path(__file__).resolve().parents[2] / "results" / "results_equal_compute.csv"
 
-# Pre-registered practical-equivalence band, as a percentage of the CI-mode MSE.
+# Pre-specified practical-equivalence band, as a percentage of the CI-mode MSE.
 _EQUIV_BAND_PCT: float = 1.0
 
 _WORD: dict[int, str] = {0: "none", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
