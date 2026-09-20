@@ -55,7 +55,7 @@ ETTh1.csv
 *.snm
 *.vrb
 
-# Local-only working documents and duplicates (never published)
+# Local-only working documents and the TMLR style-file distribution copy (never published)
 docs/
 .claude/
-paper/
+tmlr/

@@ -1,0 +1,1141 @@
+\documentclass[10pt]{article} % TMLR requires 10pt
+\usepackage{tmlr}
+\usepackage{url}
+% Submission (anonymous, under review) uses the line above as-is.
+% If/when accepted, switch to:
+%   \usepackage[accepted]{tmlr}
+%   \def\month{MM} \def\year{YYYY}
+%   \def\openreview{\url{https://openreview.net/forum?id=XXXX}}
+% For a de-anonymized preprint (e.g. arXiv), use \usepackage[preprint]{tmlr} instead.
+
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{microtype}
+\setlength{\emergencystretch}{3em}
+
+\title{Equal Accuracy, Unequal Cost: \\ Channel Dependence in PatchTST under Controlled Coupling}
+
+\begin{document}
+
+    \maketitle
+
+    \begin{abstract}
+        Channel-independent (CI) and channel-dependent (CD) variants of PatchTST are typically compared on observational
+        benchmarks where correlation strength, dimensionality, and temporal dynamics all vary at once, leaving no clean way
+        to attribute either variant's win to any single cause. We isolate one factor at a time instead. A factorial AR(1)
+        experiment varies contemporaneous correlation $\rho$ and variate count $C$ while Granger non-causality holds across
+        channels by construction; a leader-follower VAR(1) experiment then introduces lag-1 coupling of controllable strength
+        $\gamma$. Across both experiments the result is simple: letting the model attend across channels buys no measurable
+        accuracy advantage on these controlled generative processes, at a substantial increase in training cost. On the synthetic
+        grid we detect no consistent CD advantage at the $1\%$ level: the grand-mean CD$-$CI difference is $+0.0013$ MSE
+        (seed-clustered 95\% CI $[-0.0023, +0.0048]$) over five seeds, with a pooled within-cell detection half-width of 0.0063
+        MSE. Any global CD gain (averaged across the nine AR(1) cells) above roughly $0.62\%$ of the CI mean would have moved the
+        interval off zero, and none did. Under the original early-stopping protocol an apparent CD deficit emerges under lagged
+        coupling and grows with $\gamma$, staying inside our $1\%$ band throughout. An instrumented diagnostic at the
+        leader-follower $\gamma=0.6$ cell documents a mechanism without explaining the deficit: CD reaches a sharper, earlier
+        validation minimum than CI and degrades past it, but the protocol already restores validation-best weights, so the gap
+        cannot be a selection artefact. Fresh reruns of that cell give CD$-$CI of $-0.0019$ MSE (95\% CI $[-0.0105, +0.0066]$)
+        against the original $+0.0079$, a run-to-run spread comparable to the effect itself at five seeds. A closed-form analysis
+        of the generative model shows this near-parity is analytically expected, not merely observed: at the evaluation horizon,
+        no predictor, CI or CD, retains any cross-channel signal to exploit. A cross-variate prediction head ties CI at every
+        $\gamma$ and removes the coupling-dependent widening, consistent with that widening originating in the shared head
+        rather than the encoder. Matching the gradient-update budget across modes also removes the deficit, arguing against
+        the per-epoch step-count asymmetry as its source, and a block-covariance family extends the same no-advantage finding
+        beyond compound-symmetry correlation. Across every tested synthetic cell (AR(1), leader-follower, and block-covariance)
+        the absolute CD$-$CI difference stays inside a pre-specified $1\%$ relative-MSE band in both directions. Cost is another
+        matter entirely: CD requires smaller feasible batches and far more gradient steps per epoch, its batch size collapses to
+        one at $C=84$ in the main grid, and at $C=321$ on ECL (Electricity Consuming Load) a CD epoch costs roughly 956\,s at
+        batch 8; in a single-seed comparison at $H \in \{96, 336\}$, CD trails CI by 5.6--7.6\%. On the observational ETTh1
+        dataset (hourly electricity-transformer readings, $C=7$), a matched-budget comparison still gives CI a modest but
+        reliable edge (pooled CD$-$CI of $+0.0147$ MSE, seed-clustered 95\% CI $[+0.0000, +0.0293]$, significant at horizons
+        96 and 720). CI comes out as the better default on accuracy per unit compute. All findings are scoped to PatchTST's
+        flattened-token CD formulation, the generative families studied, and a single-T4 training budget.
+
+    \end{abstract}
+
+
+    \section{Introduction}
+    \label{sec:intro}
+
+    Whether channel-independent (CI) or channel-dependent (CD) architectures forecast better has been judged almost entirely on
+    observational benchmarks, where many properties of the data move together across datasets. Such a win identifies which model
+    is stronger on those particular series, but not why. Here we control the generative process instead: synthetic AR(1) and
+    leader-follower VAR(1) families that vary instantaneous correlation, lagged cross-channel dependence, and variate count
+    independently, with ETTh1 and ECL serving as real-data context rather than primary evidence.\footnote{Code,
+    configuration files, and analysis scripts for reproducing all reported results are available at an anonymized
+    repository: \url{https://anonymous.4open.science/r/ci-cd-patchtst-FCEE/}.}
+
+    Section~\ref{sec:setup} describes the experimental design, Section~\ref{sec:results} presents the AR(1) grid and real-data
+    results, Section~\ref{sec:analysis} covers the leader-follower experiments, Section~\ref{sec:robustness} presents the
+    fair-protocol robustness controls, and the remaining sections cover limitations, related work, and conclusions.
+
+    \subsection{Research Questions and Scope}
+
+    CI architectures like PatchTST have become strong baselines for multivariate time series forecasting despite ignoring
+    cross-channel interactions in their attention layers~\citep{nie2023patchtst}. At the same time, iTransformer, LIFT, and
+    Abdelmalak et al.\ each report settings where modelling channel dependence explicitly yields clear
+    gains~\citep{liu2024itransformer,zhao2024rethinkingchanneldependence,%
+        abdelmalak2025channeldependence}. None of these results are directly comparable, since the architectures, datasets,
+    and notions of cross-channel structure differ across papers, leaving no account of which property of the data tips the balance.
+
+    We focus on one specific part of that question: multivariate processes in which channels share \emph{instantaneous}
+    correlation but have no lagged cross-channel dependence in the dynamics, using the AR(1) design introduced above, where
+    $\rho$ controls contemporaneous correlation while Granger non-causality holds across all channel pairs by construction.
+    Two questions frame the work:
+
+    \begin{quote}
+        \textbf{RQ1.} In a setting where channels share purely instantaneous correlation, even at high $\rho$ and high
+        dimensionality, and no lagged cross-channel dependence exists by construction, does a channel-dependent PatchTST variant
+        achieve meaningfully better forecast accuracy than its channel-independent counterpart?
+    \end{quote}
+
+    \begin{quote}
+        \textbf{RQ2.} When lagged cross-channel coupling is introduced at controlled strength $\gamma$ via a leader-follower
+        VAR(1) process, does CD outperform CI consistently as $\gamma$ grows, and does this depend on the patch resolution used?
+    \end{quote}
+
+    RQ1 is answered by a $C \times \rho \times \text{mode}$ factorial experiment on AR(1) data where Granger non-causality
+    holds by construction. RQ2 is answered by two companion experiments: a $\gamma$ sweep at fixed patch size $P = 16$, and
+    a joint sweep over $\gamma \in \{0.0, 0.3, 0.6, 0.9\}$ and $P \in \{2, 4, 8, 16\}$ testing whether finer patch
+    resolution concentrates lag-1 coupling within individual patches and thereby gives CD's attention a detectable signal.
+    That second sweep does not cover its full grid: CD trains at $P \in \{4, 8, 16\}$, but at $P = 2$ the flattened CD sequence
+    reaches $21 \times 511 = 10{,}731$ tokens and exceeds T4 memory at any batch size under the non-fused attention
+    implementation used for this paper's runs, so the finest resolution (the one
+    where a lag-1 relation falls across adjacent patches) carries CI runs only. RQ2 is therefore answered over
+    $P \in \{4, 8, 16\}$ and left open at $P = 2$.
+
+    Within the regimes actually tested, both RQ1 and RQ2 come back null at our $1\%$ practical threshold: small differences
+    exist, but none clears the bar. Section~\ref{sec:theoretical_bound} establishes that this null is what the generative
+    model predicts: at the evaluation horizon $h = 96$, the analytical gap between a full-information and a channel-restricted
+    predictor has closed to zero width for every tested $\gamma$, leaving no predictor of either kind with cross-channel signal
+    to exploit. The comparison at $h = 96$ therefore cannot discriminate the architectures even in principle, and RQ2's null
+    is scoped to that horizon; the short-horizon regime, where the ceilings separate, is left open and named in the Limitations.
+    A set of fair-protocol controls (Section~\ref{sec:robustness}) then shows that the apparent CD deficit under lagged coupling
+    does not survive a matched update budget or a cross-variate head, and is small relative to run-to-run variation at five seeds.
+
+    Purely instantaneous correlation, regardless of strength or variate count, is not sufficient for CD to gain an advantage over
+    CI under PatchTST's architecture, and this null extends to lag-1 coupling at the strengths tested and at patch resolutions
+    $P \in \{4, 8, 16\}$ (the $P = 2$ CD configuration was infeasible under the non-fused attention implementation used for this paper's runs).
+
+
+    \section{Experimental Setup}
+    \label{sec:setup}
+
+    \subsection{Synthetic Data}
+
+    We generate multivariate time series from a vector AR(1) process:
+    \begin{equation}
+        x_{t} = \phi\, x_{t-1} + \epsilon_{t}, \qquad \epsilon_{t} \sim \mathcal{N}(0,\,\Sigma),
+    \end{equation}
+    where $\phi = 0.8$ and $\Sigma$ has compound-symmetry structure: $\Sigma_{ii} = 1$ and $\Sigma_{ij} = \rho$ for
+    $i \neq j$. The parameter $\rho$ directly controls pairwise contemporaneous correlation while the transition matrix
+    stays diagonal. We discard 1000 burn-in steps before recording observations.
+
+    For each configuration in this grid we generate 14,400 timesteps (13,400 for seeds $\{42, 123, 456\}$;
+    Table~\ref{tab:synth_protocols}), split 60/20/20 into train, validation, and test sets; the table also gives the corresponding
+    figures for the other synthetic families. Every split is normalised with per-channel z-score statistics fit on the training
+    set only. Three factors vary independently: number of channels $C \in \{7, 21, 84\}$, correlation strength
+    $\rho \in \{0.1, 0.5, 0.9\}$, and model mode $\in \{\text{CI}, \text{CD}, \text{DLinear}\}$, with five random seeds
+    $\{42, 123, 456, 789, 1011\}$ per cell, for 135 runs in total. We report the empirical pairwise Pearson correlation of the
+    training data alongside the nominal $\rho$ to confirm the data-generating process (DGP) behaves as intended.
+
+    The four synthetic families in this paper do not all share one generator. The AR(1) grid, the block-covariance family, and
+    the leader-follower $\gamma$-sweep use the process specified above, differing only in the innovation covariance, the
+    transition matrix, and (within the AR(1) grid) the series length, which takes two values across its five seeds. The
+    $(P, \gamma)$ boundary sweep of Section~\ref{sec:analysis} uses a separate generator with iid innovations, a longer series,
+    and a different split. Table~\ref{tab:synth_protocols} states each family's protocol explicitly. Because the boundary
+    protocol differs from the other three simultaneously, absolute MSE levels cannot be compared between it and the other three
+    families, and we make no such comparison; within each family the CD/CI ratio is computed against a CI arm trained under
+    that same protocol, keeping the ratio comparable throughout.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Data-generating protocols for the four synthetic families. All are VAR(1) at $\phi = 0.8$, use $L = 512$
+    and $H = 96$, and normalise by per-channel z-score statistics fit on the training split only. Three families share one
+            protocol, differing only in covariance and transition structure; the boundary sweep differs further, though not in
+            innovation scale ($\sigma = 0.1$ versus unit is removed by z-scoring) or the absence of burn-in (immaterial given
+            $\phi = 0.8$'s fast mixing over 20{,}000 steps). What is substantive is the innovation covariance, series length,
+            and split. The boundary family's recorded $\rho = 0.5$ is a schema constant kept for mergeability, not a data
+            property: its innovations are iid, with no contemporaneous cross-channel correlation.}
+        \label{tab:synth_protocols}
+        \resizebox{\textwidth}{!}{%
+        \begin{tabular}{lcccc}
+            \toprule
+            & AR(1) grid             & Block-cov.                  & Leader-follower                          & Boundary                               \\
+            & (Sec.~\ref{sec:setup}) & (Sec.~\ref{sec:robustness}) & $\gamma$-sweep (Sec.~\ref{sec:analysis}) & $(P,\gamma)$ (Sec.~\ref{sec:analysis}) \\
+            \midrule
+            Transition matrix      & $\phi\mathbf{I}$       & $\phi\mathbf{I}$            & $A(\gamma)$ lower-tri                    & $A(\gamma)$ lower-tri                  \\
+            Innovation cov.        & comp.\ sym.\ $\rho$    & block $\rho_{\text{in}}$, 0 & comp.\ sym.\ $\rho = 0.5$ & iid (diagonal) \\
+            Innovation scale       & unit                   & unit                        & unit                                     & $\sigma = 0.1$                         \\
+            Burn-in steps          & 1000                   & 1000                        & 1000                                     & none                                   \\
+            Timesteps $T$          & 13{,}400 / 14{,}400$^{c}$   & 14{,}400 & 14{,}400 & 20{,}000 \\
+            Split                  & 60/20/20\,\%                & 60/20/20\,\% & 60/20/20\,\% & 70/10/20\,\% \\
+            Train windows$^{a}$    & 7{,}433 / 8{,}033$^{c}$     & 8{,}033  & 8{,}033  & 13{,}393 \\
+            Partial final batch    & kept                   & kept                        & kept                                     & dropped                                \\
+            Channels $C$           & $\{7, 21, 84\}$        & $\{21, 84\}$                & 21                                       & 21                                     \\
+            Coupling $\gamma$      & ---                    & ---                         & $\{0, .3, .6, .9\}$                      & $\{0, .3, .6, .9\}$                    \\
+            Patch $P$ / stride $S$ & 16 / 8                 & 16 / 8                      & 16 / 8                                   & $P$ / $P/2$, $P \in \{2,4,8,16\}$      \\
+            Modes$^{b}$            & CI, CD, DLinear        & CI, CD, DLinear             & CI, CD, DLinear                          & CI, CD                                 \\
+                        \bottomrule
+        \end{tabular}
+        }
+
+        \vspace{0.5em}
+        {\footnotesize
+            $^{a}$ Training windows $= \lfloor T \cdot f_{\text{train}} \rfloor - L - H + 1$ at $L = 512$, $H = 96$.\\
+            $^{b}$ Modes attempted. Which cells completed under compute constraints is stated per experiment.\\
+            $^{c}$ AR(1) grid only: seeds $\{42, 123, 456\}$ were generated with 13{,}400 usable timesteps and seeds
+            $\{789, 1011\}$ with 14{,}400, giving 7{,}433 and 8{,}033 training windows respectively. Per-seed CD$-$CI
+        differences are unaffected, since both modes of a given seed share that seed's series; grid means in
+        Table~\ref{tab:synthetic} average over both. Table~\ref{tab:batch_sizes} reports the 7{,}433 figures.}
+    \end{table}
+
+
+    \textbf{Dynamical structure.} The transition operator $\phi\mathbf{I}$ is diagonal, so
+    $A^k = (\phi\mathbf{I})^k = \phi^k \mathbf{I}$ has zero off-diagonal entries at every power: each channel's future depends
+    only on its own past, and Granger non-causality holds exactly across all channel pairs. Cross-variate dependence, where
+    present, comes entirely from the contemporaneous covariance $\Sigma$, not from the dynamics -- and even that dependence
+    carries no Granger-predictive information, since $\Sigma$ correlates innovations that are unobserved at prediction time.
+    Lagged cross-covariance between $\Sigma$-correlated channels need not vanish at every $k$, but nothing in it is exploitable
+    beyond each channel's own history. The leader-follower experiments in Section~\ref{sec:analysis} introduce the complementary
+    case, where the transition operator structurally links one variate's future to another's past.
+
+    \textbf{Covariance design.} Compound-symmetry assigns the same pairwise correlation $\rho$ to every channel pair, giving
+    CD no differential block structure or correlation hierarchy to exploit. This is the configuration most hostile to CD
+    under instantaneous-only coupling: if CD cannot gain an advantage here, contemporaneous correlation alone will not
+    suffice under any other covariance structure within this family.
+
+    \textbf{Prediction horizon.} All synthetic AR(1) runs use $\text{pred\_len} = 96$, matching the shortest horizon in the
+    ETTh1 experiments.
+
+    \subsection{Real-World Datasets}
+
+    \textbf{ETTh1.} Hourly measurements of 7 variates (oil temperature and six power-load features) from a Chinese
+    electrical transformer. We use the standard train/val/test split of 8640/2880/2880 timesteps. The mean absolute
+    off-diagonal Pearson correlation at lag~0 across the training split is 0.311 (median 0.233), indicating moderate
+    contemporaneous cross-variate correlation.
+
+    \textbf{ECL (Electricity Consuming Load).} Hourly electricity consumption for 321 clients over 26,304 timesteps. (The
+    iTransformer paper~\citep{liu2024itransformer} reports 26,352 rows; the difference reflects a minor dataset version
+    discrepancy and does not affect the experimental protocol.) We apply proportional 60/20/20 splitting following Liu et
+    al., yielding 15,813 train / 5,247 validation / 5,244 test rows. The mean absolute off-diagonal Pearson correlation at
+    lag~0 is 0.503 (median 0.483), substantially higher than ETTh1. All data are normalised with per-channel z-score
+    statistics fit on the training set only.
+
+    \subsection{Models}
+
+    PatchTST is the backbone for both CI and CD modes because the two modes differ only in whether self-attention operates
+    within each variate's patch sequence independently or across all variates' patch sequences jointly. Patch extraction,
+    linear projection, Transformer encoder, training procedure, and hyperparameters are otherwise shared, making this the most
+    direct available test of the CD/CI distinction without entangling it with other architectural choices. iTransformer would
+    confound the comparison with its inverted embedding design, and Crossformer with its two-stage routing attention. Every
+    finding here is conditioned on PatchTST's patch-based representation and the lookback window and patch granularity used.
+
+    We implement PatchTST~\citep{nie2023patchtst} from scratch in PyTorch, supporting both modes.
+
+    \textbf{Channel-Independent (CI).} Each variate is processed separately. An input of shape $(B, L, C)$ is reshaped to
+    $(B \cdot C, L)$, split into patches of length $P$ with stride $S$, and passed through a shared Transformer encoder,
+    which sees $N$ patches per variate.
+
+    \textbf{Channel-Dependent (CD).} All variates are processed jointly. After patching, tokens from every variate are
+    concatenated along the sequence dimension before the encoder, giving an input of shape $(B,\, C \cdot N,\, D)$ over which
+    self-attention operates simultaneously, letting the model attend across variates. The encoder output is then split back
+    into $C$ per-variate representations, and a shared linear head projects each to the prediction horizon independently, so
+    only the encoder mixes cross-variate information. Every CD result reported in this paper uses tokens that carry no explicit
+    channel-identity or temporal-position embedding -- both come from fixed ordering alone, channel-major for CD (all $N$
+    patches of channel 0, then channel 1, and so on) and the natural patch sequence for CI.
+
+    For the synthetic experiments and ETTh1 we use $L = 512$, $P = 16$, $S = 8$, giving
+    \begin{equation}
+        N = \left\lfloor \frac{L - P}{S} \right\rfloor + 1
+        = \left\lfloor \frac{512 - 16}{8} \right\rfloor + 1 = 63
+    \end{equation}
+    patches per variate. For ECL we use $L = 96$ following iTransformer~\citep{liu2024itransformer}, giving $N = 11$ patches
+    per variate and $C \cdot N = 321 \times 11 = 3531$ tokens for CD. All remaining architectural hyperparameters are listed
+    in Table~\ref{tab:arch}.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Architectural hyperparameters. Synthetic and ETTh1 share one configuration;
+        ECL uses a wider model to accommodate 321 variates.}
+        \label{tab:arch}
+        \begin{tabular}{lcc}
+            \toprule
+            Hyperparameter          & Synthetic + ETTh1 & ECL \\
+            \midrule
+            $d_{\text{model}}$      & 64                & 128 \\
+            Attention heads         & 8                 & 16  \\
+            Encoder layers          & 3                 & 3   \\
+            Dropout                 & 0.2               & 0.2 \\
+            Sequence length $L$     & 512               & 96  \\
+            Patch size $P$          & 16                & 16  \\
+            Stride $S$              & 8                 & 8   \\
+            Patches per variate $N$ & 63                & 11  \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    We include DLinear~\citep{zeng2023transformerseffectivetimeseries} as a linear baseline. DLinear decomposes each
+    variate's lookback window into trend (moving-average filter with kernel size 25) and remainder, then applies separate
+    channel-independent linear maps from $L$ to $H$ for each component, summing the two outputs. It is the most competitive
+    non-Transformer baseline on standard benchmarks and sets a natural lower bar for what qualifies as learned temporal
+    structure. The DLinear values in Tables~\ref{tab:synthetic} and~\ref{tab:lf_p16} come from a dedicated
+    re-run using this full decomposition; CI and CD values in Table~\ref{tab:lf_p16} come from a separate set of runs
+    using the same windowing and seeds.
+
+    \subsection{Training Regime}
+
+    PatchTST (CI and CD) is trained with AdamW ($\text{lr} = 10^{-4}$, $\text{weight\_decay} = 10^{-4}$), a cosine
+    learning-rate schedule with linear warm-up, gradient clipping at $\text{max\_norm} = 1.0$, and FP16 mixed precision
+    (autocast + GradScaler). DLinear uses the same optimiser without warm-up. Early stopping is applied on validation MSE
+    with patience 10 and a maximum of 100 epochs for ETTh1 and 50 epochs for all other experiments; the validation-best
+    checkpoint is restored and evaluated in every case. All experiments run on a single NVIDIA T4 16\,GB GPU; Kaggle's
+    dual-T4 accelerator option was selected for every session, but no run uses more than one GPU through model or data
+    parallelism, so every reported wall-clock and memory figure reflects one T4's actual utilisation.
+
+    \textbf{Batch sizes.} T4 memory constraints force different batch sizes between CI and CD at large $C$, creating an
+    asymmetry in per-epoch gradient update counts. Table~\ref{tab:batch_sizes} reports these counts for each configuration.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Batch sizes and gradient update counts per epoch by mode and $C$. The Ratio column is CD steps / CI
+        steps. At $C=84$, steps/epoch reflects the 7,433-window figure (Table~\ref{tab:synth_protocols}, footnote c);
+        CD/CI ratios are unaffected by the seed-dependent window count, since both modes of a given seed share it.}
+        \label{tab:batch_sizes}
+        \begin{tabular}{cccccr}
+            \toprule
+            $C$ & CI batch & CD batch & CI steps/epoch & CD steps/epoch & Ratio        \\
+            \midrule
+            7   & 128      & 64       & 59             & 117            & $2.0\times$  \\
+            21  & 128      & 8        & 59             & 930            & $15.8\times$ \\
+            84  & 32       & 1        & 233            & 7433           & $31.9\times$ \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    For ETTh1 both modes use batch size 32 under the matched-budget protocol below. For ECL both modes use batch size 8
+    (1,953 steps per epoch at $H = 96$; 1,923 at $H = 336$).
+
+    \textbf{Step-count confound.} At $C = 84$, CD runs with batch size 1, giving $31.9\times$ more gradient updates per
+    epoch than CI. The cause is a hardware memory limit, not a deliberate experimental choice. We log \texttt{total\_steps}
+    for every run and report it alongside results; Section~\ref{sec:results} discusses what this asymmetry means for the
+    null result.
+
+    \textbf{Matched-budget ETTh1 protocol.} Both CI and CD use batch size 32, $\text{warmup\_epochs} = 10$, and a minimum
+    of 15 epochs before early stopping may fire. The identical batch size gives both modes the same number of gradient updates
+    per epoch at every horizon (252, 249, 244, and 232 at $H \in \{96, 192, 336, 720\}$ respectively), removing the step-count
+    confound present in earlier runs. The minimum-epoch floor prevents a degenerate epoch-one stop without inflating test MSE,
+    since the best validation checkpoint is still used for evaluation.
+
+    \textbf{ECL CD cost.} At $C = 321$ and $L = 96$ the flattened CD sequence is 3{,}531 tokens, and a CD training epoch
+    takes roughly 956\,s on the T4 at batch 8 (measured at $H = 336$), against roughly 143\,s for a CI epoch at the same
+    horizon and batch size, a $6.7\times$ cost ratio; a worst-case 50-epoch run would exceed a single 12-hour session on
+    wall-clock time. Early stopping keeps this well within budget in practice -- the completed CD runs stopped at epochs
+    23 ($H = 96$) and 17 ($H = 336$), the latter costing about 4.5 GPU-hours -- and per-epoch checkpointing with
+    cross-session resumption covers the worst case regardless. Throughout this paper, \emph{commodity GPU budget} refers
+    to single-T4 training with a 12-hour wall-clock limit, as in a standard Kaggle notebook session (see the
+    single-device disclosure in Section~\ref{sec:setup}).
+
+    \paragraph{VRAM cost of the memory wall.} The token-count argument above can be made concrete. A naive (non-fused)
+    attention implementation materialises the full $(C \cdot N) \times (C \cdot N)$ score matrix per head per layer; at
+    ECL's architecture ($C \cdot N = 3{,}531$ tokens), this term alone requires $47.6$ GiB for one encoder layer at batch
+    $128$ and $142.7$ GiB across all three layers if retained simultaneously, both well beyond a T4's $16$ GiB budget.
+    Measured peak allocation is $8.13$ GiB at batch $128$ and $0.53$ GiB at batch $8$, roughly $17\times$ and $16.7\times$
+    below the corresponding three-layer bounds of $142.7$ and $8.9$ GiB. Fused attention kernels in current PyTorch never
+    materialise this term, instead computing attention with $O(C \cdot N)$ working memory per head via online softmax,
+    which accounts for the entire gap. The compute cost, $O(C^2 N^2)$, is unaffected by kernel fusion and remains the
+    binding constraint at this scale; the finer-patch configurations examined in Section~\ref{sec:analysis} hit the same
+    memory wall this bound describes, under the non-fused implementation used for this paper's runs.
+
+
+    \section{Results}
+    \label{sec:results}
+
+    \subsection{Synthetic AR(1) Grid}
+
+    Table~\ref{tab:synthetic} shows mean test MSE over five seeds for each cell. CI and CD track each other almost exactly
+    across the grid, with the largest mean difference of $0.0054$ MSE units at $C = 84$, $\rho = 0.9$, and no consistent
+    direction to the gap. CI leads at $C = 7$ across all $\rho$, at $C = 21$ for $\rho \in \{0.1, 0.5\}$, and at $C = 84$
+    for $\rho \in \{0.5, 0.9\}$; CD leads marginally at $C = 21$, $\rho = 0.9$ and at $C = 84$, $\rho = 0.1$. At
+    $C \in \{21, 84\}$ DLinear trails both PatchTST variants everywhere except at $C = 84$, $\rho = 0.1$ cell, where all
+    three modes coincide at 0.9831--0.9832. At $C = 7$ it trails both variants throughout, by roughly $1\%$ at $\rho = 0.1$,
+    widening to roughly $4\%$ at $\rho = 0.9$. The Transformer representations add value as dimensionality and correlation
+    strength rise, but this leaves the CD/CI comparison (the central question) unaffected by where the DLinear baseline falls.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Mean test MSE over seeds $\{42, 123, 456, 789, 1011\}$ for the synthetic AR(1) grid.
+        CD/CI above 1.0 favours CI; below 1.0 favours CD.}
+        \label{tab:synthetic}
+        \begin{tabular}{ccrrrr}
+            \toprule
+            $C$ & $\rho$ & CI     & CD     & DLinear & CD/CI  \\
+            \midrule
+            7   & 0.1    & 1.0282 & 1.0298 & 1.0404  & 1.0016 \\
+            7   & 0.5    & 1.0404 & 1.0412 & 1.0557  & 1.0008 \\
+            7   & 0.9    & 1.0642 & 1.0653 & 1.1064  & 1.0011 \\
+            \midrule
+            21  & 0.1    & 0.9931 & 0.9950 & 1.0013  & 1.0019 \\
+            21  & 0.5    & 1.0179 & 1.0189 & 1.0339  & 1.0010 \\
+            21  & 0.9    & 1.0327 & 1.0311 & 1.0595  & 0.9984 \\
+            \midrule
+            84  & 0.1    & 0.9832 & 0.9831 & 0.9831  & 0.9999 \\
+            84  & 0.5    & 0.9752 & 0.9764 & 0.9781  & 1.0012 \\
+            84  & 0.9    & 0.9759 & 0.9813 & 0.9942  & 1.0056 \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.75\textwidth]{heatmap.png}
+        \caption{Synthetic AR(1) grid: CD/CI test-MSE ratio by variate count $C$ and contemporaneous correlation $\rho$,
+            averaged over seeds $\{42, 123, 456, 789, 1011\}$. Values above 1.0 favour CI, below 1.0 favour CD; the
+            colour scale is fixed at $\pm 0.5\%$. No cell departs from unity by more than $0.56\%$, and the sign of
+            the deviation is not consistent across the grid.}
+        \label{fig:synthetic_heatmap}
+    \end{figure}
+
+    The $C = 84$, $\rho = 0.9$ cell deserves closer attention. Seeds 42, 123, and 456 all stopped at best epoch 1 or 2
+    (7433 / 14866 / 7433 total gradient updates), while CI stopped with only 233--466 updates; at $n = 5$, CD's mean is
+    0.9813 against CI's 0.9759. The same pattern holds at the other two $C = 84$ cells, where every CD seed stops earlier
+    than every CI seed in the same cell (CD best epochs 4--10 against CI's 21--28 at $\rho = 0.1$; 4 against 9--12 at
+    $\rho = 0.5$). Across all three cells, CD consumes up to $32\times$ more compute per epoch and more epochs before
+    stopping, yet the two modes converge to essentially the same test MSE. The extra gradient updates do not help CD,
+    because there is no lagged cross-channel signal for its attention to exploit.
+
+    \textbf{Statistical analysis.} For each $(C, \rho)$ cell we compute the per-seed difference
+    $d_s = e^{\text{CD}}_s - e^{\text{CI}}_s$ over seeds $\{42, 123, 456, 789, 1011\}$ and derive its mean, standard
+    deviation, and 95\% confidence interval from a $t$-distribution with four degrees of freedom ($t_{0.025,4} = 2.776$).
+    Across all nine cells the mean CD$-$CI difference stays within $\pm 0.0054$ MSE units, at most $0.56\%$ of the corresponding
+    CI mean, and seven of nine 95\% CIs include zero; the two that exclude zero, at $C = 7$, $\rho = 0.1$ and $C = 21$,
+    $\rho = 0.1$, are both positive (CD worse) and below $0.19\%$ of the CI mean. Pooling the 45 matched pairs as a simple
+    unweighted average gives a grand-mean CD$-$CI of $+0.0013$ MSE ($0.13\%$ of the mean CI MSE), and regressing the paired
+    difference on $C$ (categorical) and $\rho$ finds no dependence on either factor ($F$-test $p = 0.81$, $R^2 = 0.02$).
+    Because the same five seeds recur across all nine cells, we report the grand mean's interval clustered by seed rather
+    than treating all 45 rows as independent -- averaging each seed's difference across the nine cells first gives a wider
+    but still zero-including 95\% CI of $[-0.0023, +0.0048]$. Pooling the within-cell variances gives a 95\% CI half-width
+    of $0.0063$ MSE at $n = 5$, roughly $0.62\%$ of the mean CI MSE. Any uniform CD advantage larger than that would have
+    pushed the grand-mean CI entirely above zero, and none of the observed differences come close, including the two per-cell
+    exceptions above.
+
+    \subsection{Real-Data Experiments}
+
+    \paragraph{ETTh1 ($C = 7$).} Under the matched-budget protocol, CI matches or beats CD at every horizon
+    (Table~\ref{tab:etth1}). CD is significantly worse at $H = 96$ (paired 95\% CI $[+0.0013, +0.0618]$) and $H = 720$
+    (95\% CI $[+0.0041, +0.0367]$); the $H = 192$ and $H = 336$ differences are not significant. Pooled across all 20 pairs
+    (four horizons, five seeds), the CD$-$CI difference is $+0.0147$ MSE. The same five seeds recur at every horizon, so
+    we report this pooled figure's interval clustered by seed rather than treating all 20 pairs as independent draws --
+    averaging each seed's difference across the four horizons first gives a 95\% CI of $[+0.0000, +0.0293]$. At $H = 192$
+    the ratio sits below one (CD 0.5194 vs.\ CI 0.5229), the only horizon where CD leads, but the 95\% CI $[-0.0227, +0.0159]$
+    includes zero, meaning CD's lead there is not reliable. Steps per epoch are identical across modes at every horizon,
+    so neither the update count nor the warmup schedule can explain the CI advantage at the significant horizons.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{ETTh1 mean test MSE over seeds $\{42, 123, 456, 789, 1011\}$, matched-budget protocol
+            (batch 32, warmup 10, min epochs 15 for both modes). CD/CI above 1.0 favours CI.
+            SIG = paired 95\% CI excludes zero.}
+        \label{tab:etth1}
+        \begin{tabular}{crrrc}
+            \toprule
+            $H$ & CI     & CD     & CD/CI  &     \\
+            \midrule
+            96  & 0.4599 & 0.4914 & 1.0686 & SIG \\
+            192 & 0.5229 & 0.5194 & 0.9935 &     \\
+            336 & 0.5789 & 0.5890 & 1.0174 &     \\
+            720 & 0.7062 & 0.7266 & 1.0289 & SIG \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \paragraph{ETTh1 subgroups by lagged coupling strength.} To test whether CI's edge concentrates where lagged cross-channel
+    coupling is strongest, we partition test windows by lagged coupling strength, using the mean absolute lag-1 cross-correlation
+    of first differences as the primary metric, specified before the error data existed, with the raw lag-1 statistic serving
+    as a robustness check since the two rank windows in near-opposite order on this data. The metric is strongly autocorrelated
+    across window starts, so a median split forms contiguous time regimes rather than an interleaved sample, and any subgroup
+    gap is therefore partially confounded with regime; inference aggregates errors to run level per subset before pairing by
+    seed. Under the primary split, the CD$-$CI contrast is $H=96$ high-coupling $+0.0058$ (95\% CI $[-0.0159, +0.0276]$) against
+    low-coupling $+0.0450$ ($[+0.0208, +0.0692]$); $H=192$ high $+0.0183$ ($[-0.0151, +0.0517]$) against low $+0.0466$
+    ($[-0.0258, +0.1190]$); $H=336$ high $-0.0030$ ($[-0.0259, +0.0199]$) against low $+0.0167$ ($[-0.0089, +0.0423]$);
+    $H=720$ high $+0.0263$ ($[+0.0196, +0.0329]$) against low $+0.0302$ ($[+0.0275, +0.0330]$), all $n=5$ paired over seeds.
+    The low-coupling subgroup's point estimate matches or exceeds the high-coupling subgroup's at every horizon, the opposite
+    of what a coupling-driven-advantage account would predict, so we do not read CI's ETTh1 edge as concentrated in windows
+    of higher lagged cross-channel coupling. This rules out a coupling-exploitation account of CI's edge, though the temporal
+    confounding noted above means the underlying mechanism stays unidentified.
+
+    \paragraph{ECL ($C = 321$).} Both modes train at this scale under the single-T4 budget (Section~\ref{sec:setup}), and
+    cost is what separates them. The accuracy comparison is deliberately narrow, one seed (456) at $H \in \{96, 336\}$, and is
+    reported descriptively with no confidence intervals (Table~\ref{tab:ecl}). CD trails CI at both horizons, by $+0.0133$
+    MSE ($+7.6\%$ of the CI value) at $H = 96$ and $+0.0113$ ($+5.6\%$) at $H = 336$, and reaches its validation minimum
+    far earlier (epochs 13 and 7 against CI's 42 and 25) -- the same early-minimum shape documented at the synthetic
+    $\gamma = 0.6$ cell (Section~\ref{subsec:overtrain}). ECL is included as evidence of this formulation's cost asymmetry
+    at scale rather than as a performance benchmark; a single seed supports no significance claim, and we make none.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{ECL test MSE, CI versus CD at seed 456, $H \in \{96, 336\}$. Single seed, descriptive only; no
+        confidence intervals are reported. Rel is CD$-$CI as a percentage of the CI value.}
+        \label{tab:ecl}
+        \begin{tabular}{crrrr}
+            \toprule
+            $H$ & CI     & CD     & CD$-$CI   & Rel      \\
+            \midrule
+            96  & 0.1753 & 0.1886 & $+0.0133$ & $+7.6\%$ \\
+            336 & 0.2037 & 0.2150 & $+0.0113$ & $+5.6\%$ \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.85\textwidth]{real_data.png}
+        \caption{Real-data test MSE by prediction horizon. Left: ETTh1 ($C = 7$) across $H \in \{96, 192, 336, 720\}$,
+        CI versus CD under the matched-budget protocol, mean over seeds $\{42, 123, 456, 789, 1011\}$ with error bars
+        showing the cross-seed standard deviation; CI is significantly better at $H \in \{96, 720\}$ and never worse.
+        Right: ECL ($C = 321$), CI versus CD at $H \in \{96, 336\}$, single seed (456); no error bars are drawn for
+        single-seed groups.}
+        \label{fig:real_data}
+    \end{figure}
+
+    \paragraph{Correlation and lead-lag structure.} Beyond the lag-0 correlations reported in
+    Section~\ref{sec:setup}, lagged structure adds further signal in both datasets. For ETTh1, the mean of each
+    pair's maximum absolute correlation over lags is 0.349, and $43\%$ of channel pairs gain at least 5 percentage
+    points of absolute correlation from some non-zero lag; ECL's figures run higher (mean max-over-lags
+    0.596, $49\%$ of pairs gaining at least 5pp). In both datasets lag~0 remains the strongest single lag, but the
+    lagged component is non-trivial for a substantial fraction of pairs.
+
+    Both datasets sit between the AR(1) grid (instantaneous correlation only) and the leader-follower regime (explicit
+    structural lagged coupling). We treat the ETTh1 and ECL results as contextual evidence about CD/CI behaviour in realistic
+    settings, not as controlled tests of the coupling-structure hypothesis.
+
+
+    \section{Analysis: Leader-Follower Coupling Experiments}
+    \label{sec:analysis}
+
+    The AR(1) null result is easy to explain: when the data has no lagged cross-channel signal by construction, a model
+    attending across channels has nothing additional to exploit beyond what channel-independent attention already sees.
+    RQ2 asks whether structured lagged coupling changes that.
+
+    \subsection{Leader-Follower VAR(1) Design}
+
+    We generate data from a $C = 21$ VAR(1) process with the following channel structure: channels 0--9 are \emph{leaders}
+    (pure AR(1), no cross-channel dependence); channels 10--19 are \emph{followers}, where follower $i+10$ depends on
+    leader $i$ with lag-1 coefficient $\gamma$; channel 20 is an \emph{isolate} (pure AR(1), internal negative control).
+    The transition matrix $A(\gamma)$ is lower-triangular with diagonal entries $\phi = 0.8$ and off-diagonal entries
+    $A[i+10, i] = \gamma$ for $i \in \{0,\ldots,9\}$. Lower-triangular structure guarantees spectral radius $\phi$ at all
+    finite $\gamma$, so the process is stationary by construction.
+
+    At $\gamma = 0$ the process reduces to the original AR(1) grid at $C = 21$, $\rho = 0.5$, giving a cross-experiment
+    sanity check. This anchor applies to the $\gamma$-sweep only; the $(P, \gamma)$ boundary sweep uses a different
+    generator (Table~\ref{tab:synth_protocols}), so its $\gamma = 0$ cells are not expected to reproduce the AR(1) grid,
+    and a mismatch there should not be read as a failed check. We sweep $\gamma \in \{0.0, 0.3, 0.6, 0.9\}$ with five
+    seeds and CI, CD, and DLinear modes, all at patch size $P = 16$.
+
+    \subsection{Patch-Resolution Sweep}
+
+    The null result at $P = 16$ has a natural mechanistic explanation. With stride $S = 8$, each patch spans 16 timesteps,
+    and a lag-1 cross-channel relationship (follower $i+10$ at time $t$ depending on leader $i$ at time $t-1$) means both
+    timesteps likely fall within the same patch; whether the cross-variate attention can resolve a single-step offset within
+    a 16-timestep window is unclear. Smaller patches would spread the lag-1 pair across adjacent patch tokens instead of
+    collapsing it inside one, giving CD's attention a more concentrated signal to work with.
+
+    We therefore run a joint sweep over $\gamma \in \{0.0, 0.3, 0.6, 0.9\}$ and $P \in \{2, 4, 8, 16\}$ with $S = P/2$
+    (50\% overlap), modes CI and CD, five seeds. At $P = 2$, each patch spans exactly two timesteps and stride $S = 1$, so
+    a lag-1 relationship falls across adjacent patches -- the finest resolution the architecture supports. CD at $P = 4$
+    was not run in earlier tranches under an assumed VRAM ceiling at this sequence length ($C \cdot N = 21 \times 255 = 5355$
+    tokens); a dedicated boundary tranche, launched to test that assumption directly, trains CD successfully at $P = 4$ under
+    the same single-device T4 budget, with full five-seed coverage now complete across all four $\gamma$ (Table~\ref{tab:boundary}).
+
+    \subsection{Results}
+
+    Table~\ref{tab:lf_p16} reports mean CI, CD, and DLinear MSE at $P = 16$ across the $\gamma$ sweep ($C = 21$,
+    $\text{pred\_len} = 96$, five seeds). The CD/CI ratio stays within $1\%$ of unity throughout and never falls below it.
+    It does climb with $\gamma$ under this early-stopping protocol, and regressing the paired CD$-$CI difference on $\gamma$
+    gives a slope of $+0.0072$ MSE per unit $\gamma$ (95\% CI $[+0.0027, +0.0117]$, $p = 0.004$, $R^2 = 0.38$), though the
+    climb never leaves the $1\%$ band. Section~\ref{subsec:overtrain} examines the $\gamma = 0.6$ cell directly and finds
+    the gap is not produced by checkpoint selection, and is small relative to run-to-run variation at five seeds. DLinear
+    stays within 0.004 MSE of CI at every $\gamma$, so at this $C$ a channel-independent linear map is about as accurate
+    as patch attention, though Table~\ref{tab:synthetic} shows the parity breaks at larger $C$ or $\rho$. These DLinear
+    runs reached the epoch budget without early stopping and should be read as budget-limited reference points rather than
+    fully converged optima.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Leader-follower VAR(1) at $P = 16$. Mean test MSE and CD/CI ratio over seeds
+            $\{42, 123, 456, 789, 1011\}$. CI and CD match the AR(1) grid at $\gamma = 0.0$ to within seed variance.
+            The CD/CI ratio stays within $1\%$ of unity across $\gamma$; under this early-stopping protocol it drifts
+            upward with $\gamma$, an effect Section~\ref{sec:robustness} finds is not produced by checkpoint
+            selection and is small relative to run-to-run variation.}
+        \label{tab:lf_p16}
+        \begin{tabular}{crrrr}
+            \toprule
+            $\gamma$ & CI     & CD     & DLinear & CD/CI  \\
+            \midrule
+            0.0      & 1.0270 & 1.0287 & 1.0301  & 1.0016 \\
+            0.3      & 1.0326 & 1.0393 & 1.0330  & 1.0065 \\
+            0.6      & 1.0298 & 1.0377 & 1.0301  & 1.0077 \\
+            0.9      & 1.0278 & 1.0362 & 1.0284  & 1.0082 \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    Table~\ref{tab:boundary} shows the CD/CI ratio across the $(P, \gamma)$ grid. At $P \in \{4, 8, 16\}$ both modes run
+    with full five-seed coverage and every entry is a genuine CD/CI ratio. At $P = 2$ CD remains infeasible under the non-fused
+    attention implementation (Section~\ref{sec:setup}). The cell therefore carries the CI-only test MSE where a run exists
+    and a dash otherwise ($P = 2$ at $\gamma \in \{0.0, 0.3\}$ was not run under compute constraints). This joint sweep is
+    a separate set of runs from the $\gamma$-sweep in Table~\ref{tab:lf_p16}, using a different data-generating protocol: iid
+    innovations, $T = 20{,}000$, and a 70/10/20 split, against the $\gamma$-sweep's compound-symmetry innovations at
+    $\rho = 0.5$, $T = 14{,}400$, and 60/20/20 split (Table~\ref{tab:synth_protocols}). Its $P = 16$ ratios sit nearer 1.001
+    than the 1.007--1.008 range reported there. Because no $P = 16$ cell was run under both generators, the protocol difference
+    and per-seed variation cannot be separated with the runs available, and we make no attempt to attribute the gap to either.
+    We therefore do not treat the two experiments as independent replications; what they jointly support is the weaker and
+    sufficient claim that the CD/CI ratio at $P = 16$ stays within $1\%$ of unity under both protocols.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{CD/CI MSE ratio in the $(P, \gamma)$ boundary experiment. At $P \in \{4, 8, 16\}$ both modes run and the
+        entry is a CD/CI ratio (above 1.0 favours CI). At $P = 2$ CD exceeds T4 memory under the non-fused attention implementation used here, and no
+        ratio is defined; those cells carry the CI-only test MSE where a run exists and a dash where none was performed.}
+        \label{tab:boundary}
+        \begin{tabular}{crrrr}
+            \toprule
+            $P$ & $\gamma = 0.0$ & $\gamma = 0.3$ & $\gamma = 0.6$ & $\gamma = 0.9$ \\
+            \midrule
+            16  & 1.0012         & 1.0004         & 1.0005         & 1.0010         \\
+            8   & 1.0014         & 1.0009         & 1.0009         & 1.0004         \\
+            4   & 0.9997         & 1.0004         & 1.0002         & 1.0004         \\
+            2   & ---            & ---            & CI: 0.9806     & CI: 0.9801     \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.75\textwidth]{boundary_heatmap.png}
+        \caption{Leader-follower VAR(1): CD/CI test-MSE ratio across the $(P, \gamma)$ grid, mean over seeds
+            $\{42, 123, 456, 789, 1011\}$. Values above 1.0 favour CI. Coloured cells are the configurations where both modes were
+            run ($P \in \{4, 8, 16\}$); the grey cells at $P = 2$ mark where CD exceeds T4 memory under the non-fused attention
+            implementation and was not run. Eleven of
+            the twelve coloured cells favour CI and one ($P = 4$, $\gamma = 0.0$) falls marginally below unity at $0.9997$;
+            the ratio stays within $0.15\%$ of unity throughout.}
+        \label{fig:boundary_heatmap}
+    \end{figure}
+
+    \subsection{Block-wise Attention Ablation}
+    \label{subsec:block_attn}
+
+    The results above use a CD encoder attending over all $C\cdot N$ tokens. A residual question is whether the null result
+    depends on that unrestricted scope, or would hold even under an encoder that can only attend within the coupled
+    leader-follower pairs. We implement a block-wise variant (CD\_Block) that restricts attention to each leader-follower pair,
+    treating the isolate channel as a singleton. This is the minimum scope under which a block-wise encoder can express the
+    lag-1 coupling under study, and the implementation is parameter-matched to vanilla CD, so any difference traces to
+    attention scope alone. We train it alongside same-environment CI and CD arms across the full $\gamma$ sweep, five seeds each.
+
+    Table~\ref{tab:block_attn} reports the three-arm comparison. Across $\gamma > 0$ the block-wise variant sits
+    between the two reference arms, with CD\_Block/CI ranging 1.0045--1.0056 against CD/CI's 1.0065--1.0082. The paired
+    CD\_Block$-$CI difference is not reliably distinguishable from zero at any $\gamma$ (95\% CIs span
+    $[-0.0018,+0.0111]$ at $\gamma=0.3$ through $[-0.0005,+0.0119]$ at $\gamma=0.9$), while paired CD\_Block$-$CD
+    differences run negative at every $\gamma$, narrowing vanilla CD's deficit, though none individually reaches
+    significance. Restricting attention to within-pair blocks therefore narrows but does not close vanilla CD's
+    deficit against CI, and we report the block variant as intermediate rather than extending the practical-equivalence
+    conclusion of Table~\ref{tab:equiv} to it with the same certainty.
+
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Leader-follower VAR(1) at $P = 16$: block-wise cross-variate attention (CD\_Block) alongside CI and
+            CD. CD\_Block restricts attention to leader-follower pairs (isolate as singleton), parameter-matched to
+            vanilla CD. Mean test MSE over seeds $\{42, 123, 456, 789, 1011\}$.}
+        \label{tab:block_attn}
+        \begin{tabular}{crrrrrr}
+            \toprule
+            $\gamma$ & CI     & CD     & CD\_Block & CD/CI  & Blk/CI & Blk/CD \\
+            \midrule
+            0.0      & 1.0270 & 1.0287 & 1.0273    & 1.0016 & 1.0003 & 0.9986 \\
+            0.3      & 1.0326 & 1.0393 & 1.0372    & 1.0065 & 1.0045 & 0.9980 \\
+            0.6      & 1.0298 & 1.0377 & 1.0353    & 1.0077 & 1.0054 & 0.9977 \\
+            0.9      & 1.0278 & 1.0362 & 1.0335    & 1.0082 & 1.0056 & 0.9974 \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    The same three-arm design extends to the AR(1) grid at $C = 84$, $\rho = 0.5$, where the flattened sequence reaches
+    $C \cdot N = 5{,}292$ tokens and the grouping (28 contiguous blocks of 3) is necessarily neutral, since
+    compound-symmetry covariance has no block structure to align with. These runs use a later training environment in
+    which CD and CD\_Block fit at batch 8 rather than the main grid's batch 1, plus a fresh five-seed data generation at
+    14{,}400 timesteps; the cell is therefore self-contained and never paired row-by-row against Table~\ref{tab:synthetic}.
+    All three arms land together, with mean test MSE 1.0076 (CI), 1.0045 (CD), 1.0050 (CD\_Block); paired CD$-$CI is
+    $-0.0031$ ($-0.31\%$ of the CI mean, 95\% CI $[-0.0105, +0.0042]$), CD\_Block$-$CI is $-0.0027$
+    ($[-0.0093, +0.0039]$), and CD\_Block$-$CD is $+0.0005$ ($[-0.0022, +0.0032]$); every interval spans zero. The
+    point estimates all sit inside the $1\%$ band; the CD$-$CI interval's lower edge reaches $-1.04\%$ of the CI mean,
+    marginally past the band on the CD-favourable side, which we state rather than round away. CD-family validation
+    minima again fall early, at epochs 6--10 against CI's 9--17.
+
+
+    \subsection{Mechanistic Interpretation}
+    \label{subsec:mechanistic}
+
+    The two leader-follower experiments differ in how sensitive the gap looks to $\gamma$. The boundary sweep gives a
+    flat trend. Regressing its 40 paired CD$-$CI differences at $P \in \{8, 16\}$ on $\gamma$, with patch size as a
+    covariate, gives a slope of $-0.0006$ MSE per unit $\gamma$ (95\% CI $[-0.0021, +0.0009]$, $p = 0.44$), and a
+    seed-clustered version of the same regression gives an equally flat slope (95\% CI $[-0.0029, +0.0018]$,
+    $p = 0.62$), so the result does not hinge on treating seeds as independent. The dedicated $P = 16$ sweep, by
+    contrast, shows a larger apparent trend under the original early-stopping protocol. The $P = 4$ cells are excluded
+    from the slope because they were trained in a later software environment where CD ran at CI's batch size rather
+    than at batch 8, and pooling them would confound the coupling effect with the environment difference; their
+    within-cell CD/CI ratios, unaffected by either difference, appear in Table~\ref{tab:boundary}. The environment
+    difference itself is small and measured. Re-running the CI arm at $P = 4$ in the later environment moves the
+    per-$\gamma$ CI mean by $+0.0002$ ($\gamma = 0.6$) and $+0.0006$ ($\gamma = 0.9$), well inside the old-environment
+    95\% half-widths of 0.0268 and 0.0301. The two sweeps agree that CD never holds a practically relevant lead; where
+    they part ways is whether the gap drifts with $\gamma$.
+
+    Section~\ref{sec:robustness} bears on this difference without settling it. The dedicated sweep's trend is not produced
+    by checkpoint selection (Section~\ref{subsec:overtrain}), and at $\gamma = 0.6$ the deficit is comparable in size to
+    the run-to-run spread across reruns of that cell. The part of the gap that does track $\gamma$ traces to the
+    shared prediction head rather than the encoder (Section~\ref{subsec:cdhead}). These are two separate findings from
+    two separate experiments, and neither substitutes for the other.
+
+    A representational reading of why CD gains nothing from the coupling is also available. At $P = 16$ and $S = 8$, position
+    $k$ of variate $j+10$ sits beside position $k$ of variate $j$ in the $C \cdot N = 21 \times 63 = 1323$-token sequence, so
+    a lag-1 cross-channel relationship maps to the same patch position in both sequences rather than to a phase offset between
+    them. The lag-1 information is therefore already aggregated within that shared position, leaving cross-variate attention
+    with no distinct inter-patch signal to route. CD and CI test MSEs stay within seed variance in every cell where both modes
+    run ($P \in \{4, 8, 16\}$). The finest resolution, $P = 2$ with stride 1, where lag-1 coupling would fall across adjacent
+    patches and a phase offset would be visible, is CI-only because CD exceeds T4 memory there under the non-fused attention implementation used for this paper's
+    runs. This account therefore cannot
+    be tested directly and remains a conjecture rather than a result.
+
+    \section{Fair-Protocol Robustness Controls}
+    \label{sec:robustness}
+
+    The leader-follower $P = 16$ sweep raises a question the main protocol cannot answer on its own. The apparent CD$-$CI
+    gap grows with $\gamma$ (Section~\ref{sec:analysis}), which could mean either CD is genuinely worse under stronger coupling, or
+    the training protocol places CD at a disadvantage. This section tests both readings with four analyses (checkpoint selection,
+    update budget, head design, and covariance structure) and then summarises the resulting effect sizes against a pre-specified
+    threshold. Checkpoint selection, the first of these, does not explain the gap. We fix the practical-equivalence threshold at
+    $1\%$ of the CI mean test MSE, pre-specified before these analyses were run; differences smaller than this in either direction
+    count as practically irrelevant regardless of statistical significance. This is an operational cutoff on observed effect sizes,
+    not a formal statistical-equivalence claim over the reported confidence intervals. We apply no formal multiple-comparisons
+    correction across the many cells and analyses reported here; the pre-specified $1\%$ band, held fixed and applied uniformly
+    rather than tuned to the data, is the safeguard we rely on against selective reporting, not a substitute for
+    multiplicity-adjusted hypothesis testing. The regression slopes and subgroup contrasts reported outside the primary AR(1)
+    factorial comparison are exploratory, describing the observed data rather than serving as confirmatory tests.
+
+    \subsection{Overtraining and Selection}
+    \label{subsec:overtrain}
+
+    To test whether checkpoint selection explains the gap, we instrument one training run per (mode, seed) at the
+    leader-follower $\gamma = 0.6$, $C = 21$ cell, logging validation MSE five times per epoch and training past the
+    early-stopping horizon for all five seeds $\{42, 123, 456, 789, 1011\}$. Because mid-epoch validation runs in
+    evaluation mode, it draws no random numbers and does not perturb the weight trajectory, so one trajectory supports
+    every post-hoc selection rule we compare on it. Whether it reproduces the original run is a separate
+    question, addressed next.
+
+    These are fresh instrumented reruns under the identical protocol (same seeds, steps per epoch 1005 for CD and 63 for CI),
+    not a replay of the original trajectories. They land within one epoch of the original run's best epoch in 6 of 10 runs and
+    within two epochs in the rest. CD's rerun test MSE comes in lower than its original on all five seeds ($+0.0079$ MSE,
+    95\% CI $[+0.0042, +0.0117]$), while CI's difference spans zero ($-0.0019$, 95\% CI $[-0.0084, +0.0046]$). We cannot
+    explain that CD-specific shift with the runs available, and we do not treat the diagnostic as reproducing the original
+    numbers.
+
+    What the curves show is overtraining in CD. Across seeds, CD reaches its validation minimum at epoch 4 to 7 and then climbs,
+    in seed-mean validation MSE, from 0.9865 at the minimum to 1.1999 by the end of training, while CI reaches its minimum later,
+    at epoch 16 to 20, and stays near it (seed means 0.9863 to 1.0033). Figure~\ref{fig:diag_overlay} shows the asymmetry. The
+    early-minimum shape recurs beyond this cell. In the $C = 84$, $\rho = 0.5$ three-arm run (Section~\ref{subsec:block_attn})
+    CD-family best epochs fall at 6--10 against CI's 9--17, and the single-seed ECL comparison shows the same pattern at $C = 321$
+    (Section~\ref{sec:results}).
+
+    What the curves do \emph{not} show is that overtraining produces the gap. The original protocol already restores the
+    validation-best checkpoint, since in every committed row the recorded total step count equals best epoch times steps per
+    epoch, meaning the reported test MSE is the minimum-validation checkpoint, never the checkpoint at which patience expired.
+    Selecting each model at its validation minimum is therefore not a different rule, and on the diagnostic curves the
+    two rules select the same checkpoint on every seed, to the last digit. The difference between the original
+    $+0.0079$ MSE (95\% CI $[+0.0046, +0.0113]$) and the diagnostic $-0.0031$ MSE (95\% CI $[-0.0109, +0.0046]$)
+    decomposes into three parts. Epoch-granularity selection contributes exactly zero, the evaluation cadence contributes
+    $+0.0012$ paired (per-mode epoch-boundary-minus-mid-epoch gaps: CD $+0.0005$, 95\% CI $[-0.0049, +0.0059]$; CI
+    $-0.0007$, 95\% CI $[-0.0062, +0.0047]$), and the original runs sit a further $+0.0098$ (95\% CI
+    $[+0.0001, +0.0195]$) above the reruns, a gap between two run sets rather than two selection rules.
+
+    We therefore withdraw the selection explanation for this cell. The deficit under the original protocol is $+0.77\%$
+    of the CI mean, inside the pre-specified band, and the run-to-run spread at five seeds is comparable to the effect
+    itself, so we do not read the $\gamma = 0.6$ deficit as a stable architectural quantity. The same holds for every
+    selection rule and protocol variant we tried at this cell, in one direction or the other, and
+    Section~\ref{sec:theoretical_bound} shows no cross-channel signal is available at this horizon to any predictor.
+
+    \paragraph{Candidate mechanisms for the early minimum.} Selection artefacts do not produce the deficit, but the
+    early-minimum-then-degradation shape itself is worth explaining. Three hypotheses are testable with cheap instrumentation:
+    optimisation instability from CD's longer flattened sequence, late-stage representational redundancy across variates, and
+    cross-variate attention overfitting to spurious inter-channel structure. We log per-epoch pre-clip gradient norms for all
+    three arms (CI, CD, CD\_Block) and an encoder-representation participation ratio at the $\gamma = 0.6$ cell, collected
+    during the block-attention sweep of Section~\ref{subsec:block_attn}. The gradient-norm evidence best matches the first
+    hypothesis. CD's final-epoch pre-clip gradient norms exceed the training clip threshold of $1.0$ at every $\gamma > 0$
+    ($1.17$--$1.23$, against CI's $0.87$--$0.90$ and CD\_Block's lower still at $0.82$--$0.84$), and of $216$ nonfinite
+    training steps recorded across the sweep, $115$ occur in CD and $101$ in CD\_Block, none in CI. The participation-ratio
+    panel does not support the second hypothesis as stated. CD's encoder-output feature dimensionality rises over training
+    ($3.75$ to $4.42$; CD\_Block more sharply, $3.87$ to $8.92$), while it is CI's that declines ($4.21$ to $2.64$), the
+    opposite of what redundancy in CD would predict. Neither diagnostic speaks to the third hypothesis, which these instruments
+    were never designed to detect. We read these diagnostics as consistent with the optimisation-instability account for
+    vanilla CD specifically, not as proof of mechanism; they leave the behavioural finding above unchanged either way, since
+    it does not depend on which mechanism turns out to be correct.
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\linewidth]{diag_overlay_clean.png}
+        \caption{Validation-MSE trajectories at the leader-follower $\gamma = 0.6$, $C = 21$ cell, one instrumented
+            rerun per seed, drawn to each mode's diagnostic horizon. Stars mark each seed's minimum on the mid-epoch validation grid. CD
+            (left) reaches a sharp minimum near epoch 4 to 7 and then degrades, while CI (right) settles into a flat
+            basin. The dashed line on the CD panel marks the matched update budget $U = 3150$, which falls before CD's
+            minimum, so a budget-capped rule truncates CD before its best checkpoint.}
+        \label{fig:diag_overlay}
+    \end{figure}
+
+    \subsection{Matched Update Budget}
+    \label{subsec:equalcompute}
+
+    At $C = 21$ the original protocol gives CD many more gradient updates per epoch than CI (Table~\ref{tab:batch_sizes}),
+    inviting the objection that CD is simply trained for longer and pushed past its optimum. Capping both modes at an
+    identical update budget and taking the best checkpoint within it answers that objection directly, and the deficit
+    does not survive the cap. The CD$-$CI difference is $-0.0036$ MSE (95\% CI $[-0.0059, -0.0012]$) at leader-follower
+    $\gamma = 0.0$ and $-0.0053$ MSE (95\% CI $[-0.0092, -0.0014]$) at $\gamma = 0.6$, both favouring CD, and $-0.0028$
+    MSE (95\% CI $[-0.0138, +0.0082]$) at the AR(1) $C = 84$, $\rho = 0.9$ cell, a tie, so the per-epoch step-count asymmetry
+    does not produce the apparent deficit. We treat this protocol as a sensitivity check rather than a canonical schedule,
+    because the budget $U = 3150$ is itself too tight for CD at leader-follower $\gamma = 0.6$, truncating training before
+    CD's validation minimum; under that cap the sign turns positive ($+0.0059$ MSE, 95\% CI $[+0.0003, +0.0114]$). Given the
+    overtraining shape documented in Section~\ref{subsec:overtrain}, that follows from where the cap falls rather than marking
+    a separate disadvantage.
+
+    \subsection{Head Fairness}
+    \label{subsec:cdhead}
+
+    The CD architecture in the main experiments shares CI's per-variate prediction head, raising the residual objection
+    that the head, not the encoder, limits CD. We rerun the leader-follower sweep with a cross-variate head (CD\_Head) that
+    pools across variates before projecting, leaving the encoder unchanged. The cross-variate head ties CI at every coupling
+    strength, with CD\_Head$-$CI at $+0.0016$ ($\gamma = 0.0$), $+0.0030$ ($\gamma = 0.6$), and $+0.0023$ MSE ($\gamma = 0.9$),
+    all within $0.3\%$ of the CI mean and all with 95\% CIs spanning zero. Pooled across $\gamma$ and clustered by seed, the
+    CD\_Head$-$CI grand mean is $+0.0023$ MSE ($+0.23\%$ of the CI mean, 95\% CI $[-0.0023, +0.0070]$), so the cross-variate
+    head is not detectably different from CI even pooled, well inside the $1\%$ band. The plain shared-head CD over the same
+    runs comes in at $+0.0017$, $+0.0079$, and $+0.0085$ MSE, carrying the $\gamma$-dependent widening the main sweep showed.
+    Swapping only the head removes that widening while leaving the encoder fixed, consistent with the coupling-dependent widening
+    originating in the shared head rather than in the cross-variate encoder. This is a head effect specifically, separate from the
+    overtraining phenomenon of Section~\ref{subsec:overtrain}; neither explains the other.
+
+    \subsection{Covariance Family}
+    \label{subsec:blockcov}
+
+    The AR(1) grid uses compound-symmetry covariance, where every channel pair shares the same correlation. To check that
+    the null is not specific to that structure, we test a block-covariance family in which within-block correlation
+    $\rho_{\text{in}} \in \{0.5, 0.9\}$ is concentrated in groups of seven variates and cross-block correlation is zero,
+    giving CD a block structure to exploit that compound symmetry does not offer. CD gains no practically relevant advantage
+    here either. At $C = 21$ the CD$-$CI difference is $+0.0028$ MSE ($+0.27\%$, 95\% CI $[+0.0015, +0.0040]$) at
+    $\rho_{\text{in}} = 0.5$ and $-0.0062$ MSE ($-0.60\%$, 95\% CI $[-0.0137, +0.0013]$) at $\rho_{\text{in}} = 0.9$; at
+    $C = 84$, $\rho_{\text{in}} = 0.5$ it is $+0.0005$ MSE ($+0.05\%$, 95\% CI $[-0.0005, +0.0016]$), and at $C = 84$,
+    $\rho_{\text{in}} = 0.9$ it is $+0.0000$ MSE ($+0.00\%$, 95\% CI $[-0.0010, +0.0010]$), a tie. Regressing the paired
+    difference on variate count and $\rho_{\text{in}}$ across the four cells gives a significant $\rho_{\text{in}}$ slope
+    ($-0.0118$ MSE per unit $\rho_{\text{in}}$, $p = 0.013$, $R^2 = 0.35$), so CD's standing relative to CI improves
+    slightly as within-block correlation rises, while variate count carries no effect ($p = 0.26$). Every cell sits within
+    the $1\%$ threshold, and the $C = 84$ cells again ran CD at batch size 1.
+
+    \subsection{Practical-Equivalence Summary}
+    \label{subsec:equiv_summary}
+
+    Table~\ref{tab:equiv} collects the controlled synthetic effect sizes with the selection rule used for each, so that
+    cells evaluated under different protocols are never pooled. Across all tested AR(1), leader-follower, and block-covariance
+    cells, the absolute CD$-$CI difference stays within the pre-specified $1\%$ relative-MSE threshold in both directions.
+    For the AR(1) grid this holds cell by cell as well as in aggregate. No single cell exceeds $0.56\%$ of its CI mean
+    (Section~\ref{sec:results}), so the grand-mean row of Table~\ref{tab:equiv} never averages over any cell that breaches
+    the threshold. Some differences prove statistically detectable in one direction or the other, but none reaches the
+    practical threshold, so on these controlled synthetic processes neither mode holds a practically relevant accuracy
+    advantage under fair selection. A related architecture-scope control, restricting CD's attention to the coupled
+    leader-follower pairs (Section~\ref{subsec:block_attn}), narrows vanilla CD's deficit against CI but is not folded into
+    Table~\ref{tab:equiv}. At five seeds it is not confidently distinguishable from either reference arm, and we report
+    it as intermediate rather than as a third practically-equivalent cell. Figure~\ref{fig:compute_accuracy} makes the cost
+    side of this trade-off directly visible. On two cells with substantial asymmetry in gradient updates to the selected
+    checkpoint, CD attains comparable test MSE to CI while using several times more updates to get there. Each update is
+    also more expensive under CD's longer attention sequence, so the true compute gap is larger than the update-count ratio
+    alone suggests. Table~\ref{tab:batch_sizes} reports updates per epoch; early stopping means each mode's total updates
+    to its own selected checkpoint, plotted here, is a different quantity, and the two ratios need not agree as a result.
+    The leader-follower panel's exact effect size is the $\gamma = 0.6$ early-stop row of Table~\ref{tab:equiv}; the AR(1)
+    panel's is given in Section~\ref{sec:results}.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Controlled synthetic effect sizes, CD$-$CI in test MSE, each with the selection rule under which it was
+        computed. Cells under different rules are never pooled. ``Rel'' is the difference as a percentage of the
+        CI mean; the final column reports whether the absolute difference stays within the pre-specified $1\%$
+            threshold. The $\gamma = 0.6$ early-stop row is from the original runs; the val-minimum row is from the
+            instrumented reruns (Section~\ref{subsec:overtrain}), so the two differ in run set as well as rule.}
+        \label{tab:equiv}
+        \small
+        \setlength{\tabcolsep}{3pt}
+        \begin{tabular}{lllrr c}
+            \toprule
+            Family          & Cell                               & Selection rule & CD$-$CI   & Rel       & $\le 1\%$ \\
+            \midrule
+            AR(1) grid      & grand mean (9 cells)               & early-stop     & $+0.0013$ & $+0.13\%$ & yes       \\
+            \midrule
+            Leader-follower & $\gamma = 0.6$                     & early-stop     & $+0.0079$ & $+0.77\%$ & yes       \\
+            Leader-follower & $\gamma = 0.6$                     & val-minimum    & $-0.0031$ & $-0.30\%$ & yes       \\
+            Leader-follower & $\gamma = 0.6$                     & matched-$U$    & $-0.0053$ & $-0.52\%$ & yes       \\
+            Leader-follower & $\gamma = 0.9$                     & early-stop     & $+0.0085$ & $+0.82\%$ & yes       \\
+            Leader-follower & $\gamma = 0.6$, cross-var.\ head   & early-stop     & $+0.0030$ & $+0.29\%$ & yes       \\
+            Leader-follower & $\gamma = 0.9$, cross-var.\ head   & early-stop     & $+0.0023$ & $+0.23\%$ & yes       \\
+            \midrule
+            AR(1)           & $C{=}84$, $\rho{=}0.9$             & matched-$U$    & $-0.0028$ & $-0.27\%$ & yes       \\
+            Block-cov.      & $C{=}21$, $\rho_{\text{in}}{=}0.5$ & early-stop     & $+0.0028$ & $+0.27\%$ & yes       \\
+            Block-cov.      & $C{=}21$, $\rho_{\text{in}}{=}0.9$ & early-stop     & $-0.0062$ & $-0.60\%$ & yes       \\
+            Block-cov.      & $C{=}84$, $\rho_{\text{in}}{=}0.5$ & early-stop     & $+0.0005$ & $+0.05\%$ & yes       \\
+            Block-cov.      & $C{=}84$, $\rho_{\text{in}}{=}0.9$ & early-stop     & $+0.0000$ & $+0.00\%$ & yes       \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{compute_accuracy.png}
+        \caption{Test MSE versus total gradient updates to the validation-selected checkpoint (log scale), CI and CD,
+            for two cells with substantial optimization-effort asymmetry. This measures update count, not wall-clock
+            compute, and each CD update is also more expensive, so these ratios understate the true compute gap. Points
+            are means over five seeds; error bars show the cross-seed standard deviation. CD reaches essentially the
+            same accuracy as CI while consuming 5.6$\times$ (leader-follower, $\gamma=0.6$) to 15.6$\times$ (AR(1)
+            grid, $C=84$, $\rho=0.9$) more gradient updates.}
+        \label{fig:compute_accuracy}
+    \end{figure}
+
+    \section{Theoretical Ceiling on Achievable Accuracy}
+    \label{sec:theoretical_bound}
+
+    The empirical near-parity result above raises a natural question: how much accuracy was actually available for CD to
+    win. We answer this in closed form from the generative model itself, without additional training
+    runs\footnote{Reproducible from \texttt{derive\_theoretical\_bounds.py}, committed alongside the paper's other analysis
+    scripts; every value in Table~\ref{tab:theoretical_bounds} regenerates directly from this script against the same
+    generator constants used elsewhere in the paper.}. For every diagonal-transition family (the AR(1) grid and
+    block-covariance experiments), the argument is exact. Since innovations are drawn i.i.d.\ across time and the transition
+    matrix carries no cross-channel term, the channel-independent predictor attains the same forecast-error variance as a
+    full-information predictor, for any innovation covariance. In the paper's z-scored units this reduces to $1 - \phi^{2h}$,
+    independent of $\rho$, $C$, and group structure; at $\phi = 0.8$ and $\text{pred\_len} = 96$ this equals 1.0 to float64
+    precision, indistinguishable from no signal.
+
+    The leader-follower design has a non-diagonal transition, and this argument therefore does not carry over directly to
+    follower channels. Leader and isolate channels receive no incoming coupling and stay diagonal, so their ceiling is exact
+    and matches the other families. For followers, both ceilings are available in closed form. The full-information (CD)
+    bound follows directly from the joint state-space model. The own-history (CI) ceiling takes more care, because a follower's
+    past partially reveals its leader's past, so the optimal own-history predictor is not the marginal AR(1) predictor.
+    Treating the joint process as a state-space model observed through the follower channel alone, the steady-state Kalman
+    predictor is optimal over all own-history predictors, and its $h$-step error variance is the CI ceiling. The derivation
+    script asserts two consistency checks (to float64 tolerance) and raises on failure: at $\gamma = 0$ the ceiling must
+    reproduce $1 - \phi^{2h}$ at every horizon, and $\text{CD} \le \text{CI} \le 1$ must hold at every cell.
+
+    Table~\ref{tab:theoretical_bounds} reports both ceilings across the $\gamma$-by-$h$ grid. At $h = 96$, the paper's
+    evaluation horizon, the full-information and own-history Bayes-optimal forecast-error ceilings coincide to float64
+    precision at every tested $\gamma$. The DGP therefore supplies no irreducible full-information accuracy advantage at
+    this horizon; any empirical CD$-$CI difference observed there must arise from finite-sample, optimisation, or implementation
+    effects rather than from a gap in the optimal forecast ceiling. At short horizons the ceilings separate, and the two
+    natural framings of the opportunity peak at different points. The relative gap $(\text{CI} - \text{CD})/\text{CI}$ is
+    largest at $h = 1$ ($9.8\%$, $24.9\%$, and $39.6\%$ of the CI-achievable error at $\gamma = 0.3$, $0.6$, $0.9$), while
+    the absolute gap peaks at $h = 5$ ($0.059$, $0.073$, and $0.075$ z-scored MSE; relative to the CI-achievable error at
+    $h = 5$, nine to fifteen times the $1\%$ criterion applied at $h = 96$). Whether CD converts that short-horizon opportunity
+    into realised accuracy is untested here and is named in the Limitations; we make no claim about horizons this paper does
+    not evaluate.
+
+    \begin{table}[htbp]
+        \centering
+        \caption{Follower channel: closed-form ceilings on forecast MSE (z-scored units) across the leader-follower
+            coupling sweep. CD is the full-information lower bound; CI is the ceiling for a predictor restricted to the
+            follower's own history (steady-state Kalman). At $h = 96$, the paper's evaluation horizon, the two coincide
+            to float64 precision at every tested $\gamma$.}
+        \label{tab:theoretical_bounds}
+        \small
+        \setlength{\tabcolsep}{5pt}
+        \begin{tabular}{crrrrrrrr}
+            \toprule
+            & \multicolumn{2}{c}{$\gamma = 0.0$} & \multicolumn{2}{c}{$\gamma = 0.3$} & \multicolumn{2}{c}{$\gamma = 0.6$} & \multicolumn{2}{c}{$\gamma = 0.9$} \\
+            \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+            $h$ & CD & CI & CD & CI & CD & CI & CD & CI \\
+            \midrule
+            1   & 0.3600 & 0.3600 & 0.1283 & 0.1423 & 0.0523 & 0.0696 & 0.0272 & 0.0450 \\
+            5   & 0.8926 & 0.8926 & 0.5906 & 0.6493 & 0.4591 & 0.5320 & 0.4083 & 0.4831 \\
+            10  & 0.9885 & 0.9885 & 0.8947 & 0.9199 & 0.8483 & 0.8796 & 0.8294 & 0.8615 \\
+            50  & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+            96  & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+
+    \section{Limitations}
+    \label{sec:limitations}
+
+    Every conclusion here is conditional on the generative families studied. The AR(1) process has a diagonal transition,
+    Gaussian innovations, and compound-symmetry covariance; the leader-follower extension adds one specific coupling
+    topology with a single scalar $\gamma$ at $C = 21$. We do not explore leader-follower structures at higher variate
+    counts (multiple leader-follower blocks embedded in $C = 84$, for instance). The covariance families tested,
+    compound-symmetry on the AR(1) grid and block-diagonal in Section~\ref{subsec:blockcov}, do not exhaust the space;
+    hierarchical or factor-structured correlations could behave differently even without lagged dependence, and neither
+    is tested here. Richer coupling graphs, multi-order lag coupling, chaotic dynamical systems, non-Gaussian noise, and
+    non-stationary dynamics fall outside scope as well.
+    The AR(1) coefficient is fixed at $\phi = 0.8$ and all synthetic experiments use $\text{pred\_len} = 96$; the conclusions
+    are therefore specific to this dynamic regime and horizon. The horizon scoping matters. The $1\%$ band was specified
+    for $h = 96$ and cannot be carried to $h < 50$ without restating it against the ceilings of Table~\ref{tab:theoretical_bounds},
+    which in turn fixes the target for the natural next experiment, a short-horizon comparison at $h \le 10$, where the
+    relative analytical CD--CI gap reaches $9.8$--$39.6\%$ of the CI-achievable error at $h = 1$ against the $1\%$ criterion
+    used at $h = 96$.
+
+    The CD architecture used in the main experiments applies a per-variate head after the joint encoder, so cross-variate
+    information from the encoder is never explicitly pooled during prediction. For RQ1 this is not a concern. The AR(1) design
+    contains no lagged cross-channel signal by construction, so if the encoder attending across all $C \cdot N$ tokens
+    produces no CD/CI gap, no head design could manufacture one from a signal that isn't there. For the leader-follower
+    experiments the head-fairness control in Section~\ref{subsec:cdhead} addresses this objection in part. A cross-variate
+    head ties CI at every $\gamma$ and removes the coupling-dependent widening, consistent with that widening originating in
+    the head rather than the encoder. What the control does not establish is that some other head design could turn the lagged
+    signal into a genuine CD advantage; it shows only that the shared head, not an encoder bottleneck, drives the widening
+    seen under the original protocol.
+
+    The $P = 2$ CD case was not evaluated. At $C = 21$ and $N = 511$, the CD sequence length of $21 \times 511 = 10{,}731$
+    tokens exceeds T4 VRAM at any batch size under the non-fused attention implementation used for this paper's runs (the
+    materialised-attention cost behind this bound is quantified for ECL in Section~\ref{sec:setup}). Under fused attention
+    kernels the memory wall itself is removed, since a probe at batch 64 fits CD at roughly 6.2\,GiB peak allocation, but the
+    cell becomes compute-bound: a timed-step projection puts a single CD seed at roughly 33 GPU-hours and the five-seed
+    paired design at well over a hundred, so we report $P = 2$ CD as practically infeasible by wall clock rather than
+    completing it. Only CI runs are
+    available at $P = 2$, and only for $\gamma \in \{0.6, 0.9\}$; the remaining $P = 2$ cells were not run under compute
+    constraints. This is the configuration where CD's attention resolution most closely matches the lag-1 coupling scale,
+    since one patch spans two timesteps and a lag-1 relationship falls across adjacent patches, leaving the presence or
+    absence of a CD advantage there empirically untested. Patch resolution and prediction horizon are separate, complementary
+    open dimensions. The short-horizon opportunity quantified above (Table~\ref{tab:theoretical_bounds}) is a property of
+    $h$ alone, absent at this paper's evaluation horizon regardless of $P$. Testing $P = 2$ together with a short-horizon
+    evaluation, not $P = 2$ alone at $h = 96$, is what would determine whether finer patch resolution can convert the
+    available short-horizon signal into measurable accuracy. The adjacent $P = 4$ configuration, initially excluded under
+    the same assumed ceiling, was subsequently run in full and shows no CD advantage (Table~\ref{tab:boundary}), which
+    narrows but does not close the untested region. A variate-token CD implementation, attending over $C$ tokens rather
+    than $C \cdot N$, would avoid this memory constraint and would let the remaining $P = 2$ gap close. Building such a
+    variant fell outside the scope of this work.
+
+    The $\gamma = 0.6$ diagnostic in Section~\ref{subsec:overtrain} rests on one instrumented rerun per (mode, seed) at a
+    single cell. Those reruns do not exactly reproduce the original runs. The CD arm's rerun test MSE comes in lower than its
+    original on all five seeds, and the cause is unidentified. Seeds, batch sizes, steps per epoch, and stopping rule are
+    identical between the run sets and verified against the committed result rows, ruling out a configuration difference,
+    and a consistent sign across five seeds is unlikely under nondeterminism alone. Nor is the exposure confined to
+    one cell. Every CD figure in this paper comes from a single run of the same pipeline, with rerun evidence at this cell
+    only, so we cannot bound the effect elsewhere. What we can bound is its consequence, a measured shift of $+0.77\%$
+    of the CI mean. Checking a uniform shift of this size against every synthetic cell individually, it stays inside the
+    $1\%$ band everywhere except one (block-covariance $C = 21$, $\rho_{\mathrm{in}} = 0.9$, measured $-0.60\%$, which the
+    shift would bring to $-1.37\%$). Every other cell, meaning the full AR(1) grid, the leader-follower sweep, and the remaining
+    three block-covariance cells, stays inside $\pm 1\%$ under the same hypothetical adjustment. Under the same
+    correction the pooled ETTh1 deficit ($+0.0147$ MSE, $+2.6\%$ of the CI mean) falls to roughly $+1.8\%$, still above
+    the band. We do not extend the overtraining measurement itself to other cells or datasets.
+
+    All architectural conclusions are confined to PatchTST with flattened-token channel dependence. Other ways of building
+    channel dependence, such as hierarchical or graph-based encoders, may behave differently, and the results are in any
+    case specific to the patch sizes and lookback windows used here.
+
+
+   \section{Related Work}
+    \label{sec:related_work}
+
+    \textbf{PatchTST}~\citep{nie2023patchtst} introduced patch-based channel-independent Transformers for long-horizon
+    forecasting and showed competitive or superior performance against models that attend across variates; its own
+    ablation already reports early overfitting in a channel-mixing variant relative to the channel-independent
+    design~\citep[App.~A.7.1]{nie2023patchtst}. The benchmark results leave the mechanism open. The datasets confound
+    patch size, weight sharing, and cross-variate correlation simultaneously, and the source of any CI advantage cannot therefore
+    be isolated from the architecture alone. Two further analyses extend the picture:
+    \citet{han2023capacityrobustnesstradeoffrevisiting} formalise a capacity--robustness trade-off between the two
+    strategies, showing CD's higher representational capacity comes at the cost of robustness to distribution shift,
+    while \citet{chen2024similaritysuperioritychannelclustering} tie CD's benefit to pairwise channel similarity,
+    motivating a clustering strategy that interpolates between CI and CD. Neither makes the present controlled-DGP
+    study redundant. Both characterise CI/CD behaviour on observational benchmarks where correlation strength,
+    dimensionality, and coupling vary together, whereas this paper isolates each factor under a controlled generative
+    model. Section~\ref{sec:intro} scopes the contribution accordingly, to that isolation rather than to a first
+    general account of when CI/CD works.
+
+    \textbf{DLinear}~\citep{zeng2023transformerseffectivetimeseries} established a surprisingly competitive baseline: a
+    decomposition-linear model that splits each series into a moving-average trend and a residual, each mapped linearly
+    from lookback to horizon. A Transformer that cannot beat it has not demonstrably learned useful temporal structure
+    beyond what a linear filter captures.
+
+    \textbf{iTransformer}~\citep{liu2024itransformer} inverts the embedding: each variate's full history becomes a
+    single token and attention operates across variates. It performs well on large multivariate benchmarks, but those
+    benchmarks mix correlation strength, dimensionality, and temporal structure in ways that make attributing any gain
+    to cross-variate attention specifically very difficult.
+
+    \textbf{LIFT}~\citep{zhao2024rethinkingchanneldependence} identifies leader-follower pairs empirically and prepends
+    leader context to each variate's input before a CI model, recovering cross-variate signal without full joint
+    attention. It is the closest antecedent to the leader-follower design used here; its limitation in this context is
+    that the datasets it uses are observational, meaning lag structure and instantaneous correlation cannot be decoupled.
+
+    \textbf{Abdelmalak et al.}~\citep{abdelmalak2025channeldependence} show that standard benchmarks favour CI because
+    they are dominated by within-channel periodicity, while datasets generated from chaotic ODEs with genuine
+    dynamical coupling favour CD. The two papers are complementary rather than competing. Where Abdelmalak et al.\
+    contrast dataset categories, we fix the generative model analytically and sweep coupling strength continuously.
+    The near-unity CD/CI ratios across all nine AR(1) cells (0.9984--1.0056) suggest that the ODE-dataset advantage
+    of CD does not extend to the instantaneous-correlation regime, and the leader-follower experiment probes the
+    boundary from the other side, finding the null extends there too, at least within the patch sizes and
+    coupling strengths tested.
+
+    Read together, these five lines of work leave two gaps open. None runs a factorial experiment varying cross-variate
+    correlation and dimensionality independently under a known generative model, so none can attribute performance
+    differences to a single factor, and none analytically separates instantaneous correlation from dynamical coupling.
+    LIFT probes lead-lag empirically on observational data, while Abdelmalak et al.\ build in strong ODE coupling but have no
+    instantaneous-only baseline. The two synthetic experiments here address both gaps within a specific generative
+    family, under the PatchTST architecture and training conditions described above.
+
+
+    \section{Conclusion}
+    \label{sec:conclusion}
+
+    We set out to find where in the coupling-structure space a channel-dependent PatchTST starts to beat its
+    channel-independent counterpart. Within the ranges we tested it does not, and the fair-protocol controls point to
+    cost, not accuracy, as the open question. On the AR(1) grid the grand-mean CD$-$CI difference is
+    $+0.0013$ MSE with a pooled within-cell detection half-width of 0.0063 MSE over five seeds, and every cell
+    difference falls inside that bound. Under leader-follower coupling a CD deficit appears to grow with $\gamma$ on
+    the original early-stopping protocol, though it stays inside the $1\%$ band throughout. The diagnostic at
+    $\gamma = 0.6$ documents CD overtraining (an earlier, sharper validation minimum followed by degradation), but
+    the original protocol already restores validation-best weights, so overtraining cannot be what produces the gap. Fresh
+    reruns of that cell, replaying the same early-stopping rule, give $-0.0019$ MSE (95\% CI $[-0.0105, +0.0066]$)
+    against the original $+0.0079$, a run-to-run spread comparable to the effect itself; selecting each rerun at its
+    own validation minimum instead moves this slightly further in CD's favour, to $-0.0031$ (Table~\ref{tab:equiv}).
+    Matching the gradient-update budget rules out the per-epoch step-count asymmetry as one candidate cause. Swapping in a
+    cross-variate head keeps CD\_Head within 0.3\% of CI at every $\gamma$ and removes the $\gamma$-dependent widening,
+    consistent with that widening originating in the shared head rather than the encoder, and a block-covariance family
+    extends the no-advantage finding past compound-symmetry correlation. This null is not only empirical. The closed-form
+    ceilings derived in Section~\ref{sec:theoretical_bound} coincide at $h=96$ for every tested coupling strength, so the
+    near-parity result is exactly what the generative model predicts. No tested synthetic cell shows an absolute CD$-$CI
+    difference outside a pre-specified $1\%$ relative-MSE threshold in either direction, so on these controlled processes
+    neither mode holds a practically relevant accuracy advantage once selected fairly.
+
+    The two modes diverge in cost. Making PatchTST channel-dependent by concatenating every variate's
+    patches into one attention sequence gives $C \cdot N$ tokens and an attention cost of $\mathcal{O}(C^2 N^2)$ against
+    $\mathcal{O}(C N^2)$ for CI. That cost forces CD onto smaller batches and many more gradient steps per epoch, drops
+    its batch size to one at $C = 84$ in the main grid, and at $C = 321$ (ECL) puts a CD epoch at roughly 956\,s, about
+    4.5 GPU-hours for the completed $H = 336$ run, while CI trains comfortably inside the same budget. Variate-token
+    designs such as iTransformer~\citep{liu2024itransformer} attend over $C$ tokens instead of $C \cdot N$ and sidestep
+    this cost profile entirely; what we report is therefore specific to PatchTST's flattened-token CD rather than to channel
+    dependence in general. On a single-T4 budget CI is the better default on accuracy per unit compute. It matches or
+    beats CD wherever both run, and CI remains trainable in the tested $P = 2$ cells where this CD formulation exceeds the
+    available T4 memory under the non-fused attention implementation.
+
+    The observational results point the same way, though they sit outside the equivalence claim. On ETTh1 ($C = 7$)
+    under a matched-budget protocol, CI holds a small but reliable edge, significantly better at two of four horizons,
+    never worse, with a pooled CD$-$CI of $+0.0147$ MSE, about $2.6\%$ of the CI mean. That figure sits above the $1\%$
+    band we apply to the synthetic cells, so we report it as a genuine if modest CI advantage, kept separate
+    from the equivalence result. If the run-set discrepancy documented at the $\gamma = 0.6$ cell held uniformly across
+    CD runs, this figure would fall to roughly $1.8\%$, still above the band.
+
+    Several things stay open by design. The generative families are narrow (diagonal-transition AR(1), one
+    leader-follower topology, and block-covariance, all at $\text{pred\_len} = 96$ and, for leader-follower, at
+    $C = 21$), and the short-horizon regime where Section~\ref{sec:theoretical_bound}'s ceilings actually separate
+    goes untested here. The $P = 2$ CD configuration, where attention resolution most closely matches the lag-1
+    coupling scale, is the most direct comparison left undone. Its token sequence exceeds T4 memory under the non-fused attention implementation used here, and under fused
+    attention the cell is bound by wall clock instead (Section~\ref{sec:limitations}); a variate-token CD implementation
+    is the natural way to remove either constraint. The early-minimum-then-degradation shape
+    CD shows under this protocol is now diagnosed, not explained: the evidence is consistent with optimisation
+    instability, does not support representational redundancy as stated, and cannot speak to attention overfitting
+    (Section~\ref{subsec:overtrain}). We do not treat that mechanism as settled. The natural next steps are testing
+    whether the null holds at shorter horizons, at $P = 2$, and under a variate-token CD formulation.
+
+    \bibliographystyle{tmlr}
+    \bibliography{references}
+\end{document}
