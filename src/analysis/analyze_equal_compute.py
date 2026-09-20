@@ -145,7 +145,42 @@ def print_latex_prose(paired: pd.DataFrame, gm: dict, budget_note: str) -> None:
     )
 
 
-def main() -> None:
+# Oracle targets quoted from main.tex Section 5.2 (per-cell CD-CI mean and 95% CI,
+# 4 dp) and Table 10 (relative effect, 2 dp, for the two cells it lists).
+_ORACLE_CELLS: dict[str, tuple[float, float, float]] = {
+    "lf_gamma0.0": (-0.0036, -0.0059, -0.0012),
+    "lf_gamma0.6": (-0.0053, -0.0092, -0.0014),
+    "ar1_C84_rho0.9": (-0.0028, -0.0138, 0.0082),
+}
+_ORACLE_REL_PCT: dict[str, float] = {"lf_gamma0.6": -0.52, "ar1_C84_rho0.9": -0.27}
+
+
+def _oracle_check(paired: pd.DataFrame) -> tuple[list[str], bool]:
+    """Compare recomputed values against the targets quoted from main.tex."""
+    lines: list[str] = []
+    ok_all = True
+    rows = paired.set_index("cell")
+    for cell, (t_mean, t_lo, t_hi) in _ORACLE_CELLS.items():
+        if cell not in rows.index:
+            ok_all = False
+            lines.append(f"  [FAIL] {cell}: cell absent from the input")
+            continue
+        row = rows.loc[cell]
+        got = (round(float(row["mean_diff"]), 4), round(float(row["ci_lo"]), 4), round(float(row["ci_hi"]), 4))
+        ok = got == (t_mean, t_lo, t_hi)
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] {cell}: CD-CI {got[0]:+.4f} [{got[1]:+.4f}, {got[2]:+.4f}]  "
+                     f"target {t_mean:+.4f} [{t_lo:+.4f}, {t_hi:+.4f}]")
+        if cell in _ORACLE_REL_PCT:
+            got_rel = round(float(row["rel_pct"]), 2)
+            ok = got_rel == _ORACLE_REL_PCT[cell]
+            ok_all = ok_all and ok
+            lines.append(f"  [{'PASS' if ok else 'FAIL'}] {cell}: relative {got_rel:+.2f}%  "
+                         f"target {_ORACLE_REL_PCT[cell]:+.2f}%")
+    return lines, ok_all
+
+
+def main() -> int:
     csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else _RESULTS_PATH
     df = load_results(csv_path)
 
@@ -160,12 +195,19 @@ def main() -> None:
         print("\n=== PAPER PROSE WITHHELD ===")
         print("Validity gate failed: the budgets are not matched and fully consumed, so the")
         print("equal-compute paragraph is not emitted until the gate passes.")
-        return
+        print("\nRESULT: FAIL - validity gate")
+        return 1
 
     budgets = sorted(int(b) for b in df["budget_updates"].unique())
     budget_note = f"$U = {budgets[0]}$" if len(budgets) == 1 else f"$U$ per cell in {{{', '.join(map(str, budgets))}}}"
     print_latex_prose(paired, gm, budget_note)
 
+    print("\n=== ORACLE CHECK (main.tex Section 5.2 and Table 10) ===")
+    check_lines, all_pass = _oracle_check(paired)
+    print("\n".join(check_lines))
+    print(f"\nRESULT: {'PASS - equal-compute cells reproduce' if all_pass else 'FAIL - see lines above'}")
+    return 0 if all_pass else 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

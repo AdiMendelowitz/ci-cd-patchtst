@@ -417,7 +417,47 @@ def plot_heatmap(ratios: pd.DataFrame, out_path: Path) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main() -> None:
+# Oracle targets quoted from main.tex: Table 4 (CD/CI per cell, 4 dp), the
+# grand-mean paragraph of Section 4.1 (grand mean and seed-clustered 95% CI, 4 dp,
+# pooled half-width, 4 dp) and its regression (F-test p, 2 dp; R2, 2 dp).
+_ORACLE_RATIO: dict[tuple[int, float], float] = {
+    (7, 0.1): 1.0016, (7, 0.5): 1.0008, (7, 0.9): 1.0011,
+    (21, 0.1): 1.0019, (21, 0.5): 1.0010, (21, 0.9): 0.9984,
+    (84, 0.1): 0.9999, (84, 0.5): 1.0012, (84, 0.9): 1.0056,
+}
+_ORACLE_GRAND: dict[str, float] = {
+    "mean_diff": 0.0013, "clustered_ci_lo": -0.0023, "clustered_ci_hi": 0.0048,
+    "half_width": 0.0063, "f_p": 0.81, "r2": 0.02,
+}
+
+
+def _oracle_check(ratios: pd.DataFrame, gm: dict, lm: dict, half_width: float) -> tuple[list[str], bool]:
+    """Compare recomputed values against the targets quoted from main.tex."""
+    lines: list[str] = []
+    ok_all = True
+    for _, row in ratios.iterrows():
+        key = (int(row["C"]), round(float(row["rho"]), 6))
+        got = round(float(row["ratio"]), 4)
+        target = _ORACLE_RATIO[key]
+        ok = got == target
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] C={key[0]} rho={key[1]}: CD/CI {got:.4f}  target {target:.4f}")
+    got_grand = {
+        "mean_diff": round(gm["mean"], 4),
+        "clustered_ci_lo": round(gm["ci_lo"], 4),
+        "clustered_ci_hi": round(gm["ci_hi"], 4),
+        "half_width": round(half_width, 4),
+        "f_p": round(lm["pval_f"], 2),
+        "r2": round(lm["r2"], 2),
+    }
+    for name, target in _ORACLE_GRAND.items():
+        ok = got_grand[name] == target
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] {name}: {got_grand[name]:+.4f}  target {target:+.4f}")
+    return lines, ok_all
+
+
+def main() -> int:
     csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else _GRID_PATH
     df = load_grid(csv_path)
 
@@ -436,6 +476,13 @@ def main() -> None:
     print_latex_prose(paired, gm, lm, half_width, seeds)
     plot_heatmap(ratios, _FIGURES_DIR / "heatmap.png")
 
+    print("\n=== ORACLE CHECK (main.tex Table 4 and Section 4.1) ===")
+    check_lines, all_pass = _oracle_check(ratios, gm, lm, half_width)
+    print("\n".join(check_lines))
+    verdict = "PASS - Table 4 and the grand-mean paragraph reproduce" if all_pass else "FAIL - see lines above"
+    print(f"\nRESULT: {verdict}")
+    return 0 if all_pass else 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
