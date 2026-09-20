@@ -1,6 +1,6 @@
 """Make sibling source packages importable during test collection.
 
-test_experiments.py imports `models` (src), `generate_block_cov`
+test_experiments.py imports `models` (src), `generate_ar1_grid` and `generate_block_cov`
 (src/generators), and `paired_stats` (src/analysis) as top-level modules.
 pytest only puts the test directory on sys.path, so add src and its two
 subdirectories here.
