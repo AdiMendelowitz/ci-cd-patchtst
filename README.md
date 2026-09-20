@@ -231,8 +231,10 @@ ablation (including its single-cell C=84 AR(1)-grid variant,
 `train_grid_c84_block_attn.ipynb`), the AR(1) grid's extra-seed run
 (`train_grid_extra_seeds.ipynb`, seeds {789, 1011}; see Reproducing from
 scratch for how it relates to the original three seeds), and the boundary P=4
-gamma-sweep slices with their config files. The boundary sweep's original
-notebooks are committed separately under `notebooks/original/` (see
+gamma-sweep slices with their config files. Some notebooks refer to
+`results_grid.csv` by its earlier name, `results_grid_canonical.csv`, in
+their comparison cells; the two are the same file. The boundary sweep's
+original notebooks are committed separately under `notebooks/original/` (see
 Reproducing from scratch).
 
 ## Reproducing from scratch
