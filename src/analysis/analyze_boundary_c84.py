@@ -1,8 +1,7 @@
 """C=84 three-arm lightweight-CD ablation for the AR(1) grid.
 
-The analysis was pre-registered before the underlying data existed, so
-the methodology could not be shaped by which direction the numbers
-landed. Oracle values below were frozen at the first run against the
+The analysis was specified before the underlying data existed, so the
+methodology could not be shaped by which direction the numbers landed. Oracle values below were frozen at the first run against the
 committed results file.
 
 Reads a self-contained results file for the AR(1) grid at C=84, modes
@@ -20,9 +19,7 @@ CD_Block partition: necessarily neutral (contiguous groups), since the
 AR(1) grid's compound-symmetry covariance has no leader-follower or
 block structure for a partition to align with or against -- unlike the
 leader-follower sweep's CD_Block, which preserves real pair structure.
-This is a structural fact about the grid, not a modelling choice; the
-neutral-partition framing belongs in the writeup regardless of the
-rho scope decided at launch.
+This is a structural fact about the grid, not a modelling choice.
 
 Outputs, matching analyze_block_attention.py's structure so the two
 three-arm ablations in this paper report in a consistent shape: the
@@ -53,7 +50,7 @@ from scipy import stats
 import paired_stats as ps  # sibling module; on sys.path when run as a script
 
 _ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_CSV = _ROOT / "results" / "Revision" / "train_grid_c84_block_attn" / "results_grid_C84_block_attn.csv"
+_DEFAULT_CSV = _ROOT / "results" / "results_grid_C84_block_attn.csv"
 
 _MODES: tuple[str, ...] = ("CI", "CD", "CD_Block")
 _SEED_ORDER: tuple[int, ...] = (42, 123, 456, 789, 1011)

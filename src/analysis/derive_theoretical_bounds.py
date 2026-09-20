@@ -34,8 +34,7 @@ Followers are reported three ways across the full horizon sweep:
 
   1. CD bound: the unrestricted ceiling [Sigma_h]_ii / stationary variance.
   2. CI bound: the own-history-only ceiling, computed exactly (below).
-  3. Sandwich width: 1.0 - CD bound, retained from the earlier revision of
-     this script for continuity with material already produced from it.
+  3. Sandwich width: 1.0 - CD bound, retained as a diagnostic.
 
 The sandwich width upper-bounds the CI-CD gap but does not estimate it. Its
 upper limit of 1.0 is the no-signal ceiling, not the CI-restricted ceiling,
@@ -97,7 +96,7 @@ auto-import.
 
 Writes
 ------
-results/Revision/theoretical_bounds.csv, resolved against the repository
+results/theoretical_bounds.csv, resolved against the repository
 root so the script produces the same file from any working directory.
 
 Row count: 62 (9 AR(1) grid + 4 block-covariance + 1 boundary sweep + 8
@@ -152,7 +151,7 @@ KALMAN_OBS_NOISE = 1e-10
 KALMAN_OBS_NOISE_PROBES = (1e-8, 1e-10, 1e-12)
 
 EXPECTED_ROWS = 62
-OUT_PATH = _ROOT / "results" / "Revision" / "theoretical_bounds.csv"
+OUT_PATH = _ROOT / "results" / "theoretical_bounds.csv"
 
 SCHEMA = ["family", "cell", "h", "bound_type", "bound", "sandwich_width"]
 MERGE_KEYS = ["family", "cell", "h", "bound_type"]

@@ -1,17 +1,17 @@
 """Stage 0 measurement probe.
 
 Extends the committed dry run (dryrun_block_attention.py) to every
-configuration the revision run matrix needs priced before launch:
+configuration in the run matrix:
 
     lf_c21           CI ladder; CD and CD_Block at the committed batch 8
-                     (CD_Block@8 is the declared gap; CD@8 calibrates it)
+                     (CD@8 calibrates CD_Block@8)
     boundary_p4_c21  P=4 stride 2 (S = P/2, confirmed from main.tex):
                      N=255, C*N=5355; CD and CI
     boundary_p2_c21  P=2 stride 1: N=511, C*N=10731; CD and CI. If CD OOMs
                      at batch 8, that is the signal that the protocol needs the
                      gradient-checkpointing flag.
-    ecl_cd           ECL C=321 vanilla CD (C*N=3531): settles the
-                     current-torch status of the infeasibility claim
+    ecl_cd           ECL C=321 vanilla CD (C*N=3531): feasibility under
+                     the current PyTorch
     ecl_cd_block     ECL C=321, contiguous groups of 3 (neutral partition)
 
 Per (config, mode, batch) cell it reports: feasibility, warmup and steady
@@ -27,8 +27,7 @@ as warmup. CD-family modes are additionally measured at the committed
 protocol batch 8 even when a larger batch fits, because protocol identity
 fixes the batch of any new CD arm.
 
-Ships as a further version of the block-attn-dryrun dataset beside the
-AMP-fixed models_cd_block.py. Run on a T4:
+Run on a T4 with models_cd_block.py beside it:
 
     %run <path>/dryrun_stage0.py                      # all configs
     %run <path>/dryrun_stage0.py --config lf_c21 --config boundary_p4_c21
@@ -76,8 +75,8 @@ assert _AMP_FIX_MARKER in _module_path.read_text(), (
 from models_cd_block import PatchTST_CD_Block, contiguous_groups, leader_follower_groups, num_patches
 
 # Schedule constants, shared by every family.
-_N_LAYERS = 3            # main.tex Table 1: encoder layers is 3 for both configurations
-_DROPOUT = 0.2           # main.tex Table 1: dropout is 0.2 for both configurations
+_N_LAYERS = 3            # main.tex Table 2: encoder layers is 3 for both configurations
+_DROPOUT = 0.2           # main.tex Table 2: dropout is 0.2 for both configurations
 _LR = 1e-4
 _WEIGHT_DECAY = 1e-4
 _GRAD_CLIP = 1.0
@@ -88,14 +87,12 @@ _CD_FAMILY_BATCH = 8     # committed protocol batch for CD and CD_Block arms
 _CI_BATCH = 128          # committed protocol batch for CI arms (synthetic families)
 _BATCH_LADDER = (128, 64, 32, 16, 8, 4, 2, 1)
 
-# Architecture presets, main.tex Table 1 ("Architectural hyperparameters").
+# Architecture presets, main.tex Table 2 ("Architectural hyperparameters").
 # Synthetic and ETTh1 share one configuration; ECL uses a wider model at a
 # shorter sequence length to accommodate 321 variates. Every _CONFIGS entry
 # below sets one of these explicitly -- there is no module-level default, so
 # a family that forgets to set one fails on a missing dict key instead of
-# silently inheriting the wrong architecture (see git history for what
-# happened when ecl_cd shared _SEQ_LEN/_D_MODEL/_N_HEADS with the synthetic
-# families).
+# silently inheriting the wrong architecture.
 _ARCH_SYNTH = dict(seq_len=512, d_model=64, n_heads=8)
 _ARCH_ECL = dict(seq_len=96, d_model=128, n_heads=16)
 
@@ -108,7 +105,7 @@ _ECL_C = 321
 #   uses ceil, so committed step counts are pinned per cell below instead.
 # ecl: ECLDataset applies the iTransformer split (15840/26352 train
 #   proportion) to the real file's row count. The live training run
-#   (ecl_ci_cd_train_logs_stdout.txt) logs the actual split as
+#   (results/logs/ecl_ci_cd_train_resumable_v3_stdout.txt) logs the actual split as
 #   train_end=15813 rows; at seq_len=96, pred_len=96 that gives
 #   15813 - 96 - 96 + 1 = 15622 windows. This also matches the same log's
 #   CI steps/epoch of 1953 at batch 8 (ceil(15622 / 8) = 1953), which is an

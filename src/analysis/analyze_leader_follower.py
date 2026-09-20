@@ -1,6 +1,6 @@
-"""Leader-follower P = 16 sweep analysis (Table 6 and Section 4.3 slope).
+"""Leader-follower P = 16 sweep analysis (Table 7 and Section 4.3 slope).
 
-Reproduces Table 6 and the gamma-slope of Section 4.3 of "Equal Accuracy, Unequal
+Reproduces Table 7 and the gamma-slope of Section 4.3 of "Equal Accuracy, Unequal
 Cost: Channel Dependence in PatchTST under Controlled Coupling". The dedicated
 leader-follower sweep fixes C = 21, rho = 0.5, patch size P = 16 and varies the
 lag-1 coupling strength gamma in {0.0, 0.3, 0.6, 0.9} across modes {CI, CD,
@@ -43,7 +43,7 @@ _GAMMAS: tuple[float, ...] = (0.0, 0.3, 0.6, 0.9)
 _SEED_ORDER: tuple[int, ...] = (42, 123, 456, 789, 1011)
 _REQUIRED_COLS: set[str] = {"gamma", "mode", "seed", "test_mse"}
 
-# Oracle targets from main.tex Table 6 and Section 4.3.
+# Oracle targets from main.tex Table 7 and Section 4.3.
 # gamma -> (CI mean, CD mean, DLinear mean, CD/CI ratio), 4 decimal places.
 _ORACLE_BODY: dict[float, tuple[float, float, float, float]] = {
     0.0: (1.0270, 1.0287, 1.0301, 1.0016),
@@ -146,7 +146,7 @@ def gamma_slope(df: pd.DataFrame) -> dict[str, float]:
 def paired_by_gamma(df: pd.DataFrame) -> pd.DataFrame:
     """Per-gamma paired CD-CI mean difference with 95% paired-t CIs (df = 4).
 
-    Supporting detail for Table 6; reuses paired_stats so the per-cell CIs share
+    Supporting detail for Table 7; reuses paired_stats so the per-cell CIs share
     one verified implementation with the other control analyses.
 
     Args:
@@ -212,7 +212,7 @@ def _check(body: pd.DataFrame, slope: dict[str, float]) -> tuple[list[str], bool
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Reproduce Table 6 and the Section 4.3 gamma slope.
+    """Reproduce Table 7 and the Section 4.3 gamma slope.
 
     Args:
         argv: Optional argument vector (defaults to sys.argv).
@@ -220,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code: 0 if every value matches the oracle, else 1.
     """
-    parser = argparse.ArgumentParser(description="Leader-follower P=16 sweep (Table 6, Section 4.3 slope).")
+    parser = argparse.ArgumentParser(description="Leader-follower P=16 sweep (Table 7, Section 4.3 slope).")
     parser.add_argument("--csv", type=Path, default=_CSV, help="Leader-follower results CSV.")
     args = parser.parse_args(argv)
 
@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     slope = gamma_slope(df)
     paired = paired_by_gamma(df)
 
-    print("=== TABLE 6 BODY (mean test MSE over seeds {42,123,456,789,1011}) ===")
+    print("=== TABLE 7 BODY (mean test MSE over seeds {42,123,456,789,1011}) ===")
     for _, row in body.iterrows():
         print(
             f"  gamma={row['gamma']}: CI {row['ci']:.4f}  CD {row['cd']:.4f}  "
@@ -249,10 +249,10 @@ def main(argv: list[str] | None = None) -> int:
         f"p={slope['p']:.3f}  R2={slope['r2']:.2f}  n={slope['n']}"
     )
 
-    print("\n=== ORACLE CHECK (main.tex Table 6 and Section 4.3) ===")
+    print("\n=== ORACLE CHECK (main.tex Table 7 and Section 4.3) ===")
     check_lines, all_pass = _check(body, slope)
     print("\n".join(check_lines))
-    print(f"\nRESULT: {'PASS - Table 6 and slope reproduce' if all_pass else 'FAIL - see lines above'}")
+    print(f"\nRESULT: {'PASS - Table 7 and slope reproduce' if all_pass else 'FAIL - see lines above'}")
     return 0 if all_pass else 1
 
 

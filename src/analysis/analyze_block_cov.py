@@ -1,4 +1,4 @@
-"""Experiment 3 analysis: block-diagonal-covariance AR(1) grid.
+"""Covariance-family control: block-diagonal-covariance AR(1) grid.
 
 Reads
 -----
@@ -8,7 +8,7 @@ results/results_block_cov.csv
 
 Writes
 ------
-Results/figures/heatmap_block_cov.png
+paper/figures/heatmap_block_cov.png
     CD/CI MSE ratio heatmap over (C, rho_in), fixed colour scale at +/-0.5%.
     Written only when every cell is complete (see the completeness gate below).
 
@@ -48,7 +48,7 @@ _RATIO_HALF_RANGE = 0.005  # heatmap colour scale, +/- this fraction around 1.0
 
 _MIN_SEEDS = 2  # fewest paired seeds that still admit a t-CI
 _EXPECTED_N = 5  # canonical seeds per cell; prose and figure are withheld until every cell reaches it
-_EQUIV_BAND_PCT = 1.0  # pre-registered practical-equivalence band, percent of CI MSE
+_EQUIV_BAND_PCT = 1.0  # pre-specified practical-equivalence band, percent of CI MSE
 
 _WORD: dict[int, str] = {
     0: "none",

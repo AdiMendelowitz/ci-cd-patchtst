@@ -42,8 +42,7 @@ output, on the order of 3 MB. Peak memory is well within typical constraints.
 Pipeline position: this script generates the raw correlation statistics; it
 does not itself verify them against the paper. analyze_realdata.py is the
 downstream consumer responsible for cross-checking its output against the
-values quoted in main.tex, per this project's provenance convention of
-pre-registering an oracle before a number is trusted in the paper. After the
+values quoted in main.tex against a pinned oracle. After the
 first run against the current data files, review the printed summary by hand
 and pin the resulting values as the oracle in analyze_realdata.py.
 

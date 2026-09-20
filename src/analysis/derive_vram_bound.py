@@ -1,21 +1,21 @@
-﻿"""Materialised-attention VRAM bound for PatchTST-CD on ECL, worked arithmetic.
+"""Materialised-attention VRAM bound for PatchTST-CD on ECL, worked arithmetic.
 
 Reads nothing: every number is derived analytically from committed
 architecture constants (C, seq_len, patch_size, stride, num_heads,
 num_layers, dtype). No results CSV is read or required, the same
-provenance posture as derive_theoretical_bounds.py (B7) -- this is a
+provenance posture as derive_theoretical_bounds.py; this is a
 derivation, not a measurement.
 
 Method
 ------
 Flattening every variate's patches into one CD attention sequence gives
-C * N tokens (main.tex, Sec. 2, Table 1). A naive (non-fused) attention
+C * N tokens (main.tex, Sec. 2, Table 2). A naive (non-fused) attention
 implementation materialises the full score matrix of shape
 (B, num_heads, C*N, C*N) and keeps it resident for the backward pass,
 one copy per encoder layer under standard (non-checkpointed) autograd.
 That is the O(C^2 N^2) term the paper's cost section already names; this
-script turns it into bytes for the reviewer's requested C = 321 (ECL)
-worked example.
+script turns it into bytes for the C = 321 (ECL) worked example in the
+paper's cost section.
 
     bytes_per_layer = batch * num_heads * (C*N)**2 * bytes_per_element
     bytes_all_layers = bytes_per_layer * num_layers
@@ -23,20 +23,17 @@ worked example.
 This is a bound on the materialised-attention term alone, not a full
 training-memory estimate (it excludes parameters, gradients, optimizer
 state, patch-embedding and FFN activations). It is deliberately narrow
-so it isolates the one term the reviewer asked about.
+so it isolates the one term the paper's cost section quantifies.
 
 Cross-check against measured anchors
 -------------------------------------
 Two real Stage-0 probe measurements exist for ecl_cd/ecl_cd_block under
 the current (fused-attention) PyTorch environment on a real T4
-(dryrun_stage0.py, account REDACTED, block-attn-dryrun dataset,
-12 Aug run -- corrected architecture: seq_len=96, d_model=128, 16 heads,
-matching Table 1). A first probe run (03 Aug) measured 11.67 GiB / OOM at
-this same nominal token count, but that run silently used the synthetic-
-family architecture (seq_len=512, d_model=64, 8 heads, C*N=20223) instead
-of ECL's own -- a real bug, fixed in dryrun_stage0.py, and NOT the anchor
-used below. The anchors below are from the corrected, architecture-
-verified run only.
+(dryrun_stage0.py; architecture seq_len=96, d_model=128, 16 heads,
+matching Table 2). An earlier probe run had used the synthetic-family
+architecture (seq_len=512, d_model=64, 8 heads, C*N=20223) instead of
+ECL's own and is not used here; the anchors below are from the run with
+the ECL architecture.
 
     batch 128: peak 8.134 GiB, no OOM (892.9 s/epoch)
     batch   8: peak 0.534 GiB, no OOM
@@ -53,16 +50,14 @@ Kaggle session's wall-clock budget.
 
 Writes
 ------
-results/vram_bound.csv -- machine-readable, human-gated (a paper
-decision, not this script's, whether or how any row is used in the
-response or main.tex).
+results/vram_bound.csv, the same figures in machine-readable form.
 """
 
 from pathlib import Path
 
 import pandas as pd
 
-# ECL CD architecture constants (main.tex Table 1; train_ecl.ipynb /
+# ECL CD architecture constants (main.tex Table 2; train_ecl.ipynb /
 # ecl_ci_cd_train.ipynb CONFIG; N derived from seq_len/patch_size/stride).
 C = 321
 SEQ_LEN = 96
@@ -74,8 +69,8 @@ BYTES_PER_ELEMENT = 2  # FP16
 
 GIB = 1024 ** 3
 
-# Measured 12 Aug anchors, corrected (real ECL) architecture, current
-# (fused-attention) environment, single T4 (dryrun_stage0.py; ledger Â§13).
+# Measured anchors: ECL architecture, fused-attention environment, single T4
+# (dryrun_stage0.py).
 MEASURED_ANCHORS = {
     128: {"peak_gib": 8.134, "sec_per_epoch": 892.9, "oom": False},
     8: {"peak_gib": 0.534, "sec_per_epoch": 894.9, "oom": False},
@@ -163,9 +158,8 @@ def main() -> int:
     pd.DataFrame(rows).to_csv(out_path, index=False)
     print(f"\nwrote {len(rows)} rows to {out_path}")
 
-    # Real check, not an unconditional claim: the whole argument rests on
-    # the materialised bound exceeding every measured anchor. Verify it
-    # rather than asserting PASS by print alone.
+    # The argument rests on the materialised bound exceeding every measured
+    # anchor, so that is checked rather than assumed.
     failures = [
         r for r in rows
         if r["measured_fused_GiB"] is not None and r["bound_alllayers_GiB"] <= r["measured_fused_GiB"]

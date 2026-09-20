@@ -1,12 +1,12 @@
 """Block-attention ablation analysis for the leader-follower sweep.
 
 Reproduces the three-arm leader-follower sweep under
-results/Revision/train_block_attention/: modes {CI, CD, CD_Block} at C = 21,
+results/: modes {CI, CD, CD_Block} at C = 21,
 rho = 0.5, P = 16, gamma in {0.0, 0.3, 0.6, 0.9}, seeds {42, 123, 456, 789,
 1011} (60 rows). CD_Block restricts attention to within-group blocks
 (models_cd_block.py); the CD-family arms run at the
 committed batch 8 while CI stays at its committed 128, so the CD-CI contrast
-here is directly comparable to the committed Table 6 sweep.
+here is directly comparable to the committed Table 7 sweep.
 
 Outputs, in order: the three-arm pivot (per-gamma mean test MSE and the three
 ratios CD/CI, Blk/CI, Blk/CD), the three paired per-seed contrasts with 95%
@@ -19,8 +19,7 @@ consistent with the stated hypothesis, never as a mechanism claim.
 
 The oracle section pins every reported number against a frozen oracle pivot
 plus the deterministic supporting facts recomputed from the committed CSVs.
-This script is the canonical analysis; downstream prose is frozen only once
-it reports PASS.
+The paper's numbers for this ablation are taken from this script's output.
 
 Run from a clean checkout:
 
@@ -37,7 +36,7 @@ from scipy import stats
 import paired_stats as ps  # sibling module; on sys.path when run as a script
 
 _ROOT = Path(__file__).resolve().parents[2]
-_RESULTS_DIR = _ROOT / "results" / "Revision" / "train_block_attention"
+_RESULTS_DIR = _ROOT / "results"
 _CSV = _RESULTS_DIR / "results_block_attention.csv"
 _DIAG = _RESULTS_DIR / "diag_b5_gamma06.csv"
 
@@ -63,9 +62,8 @@ _ORACLE_BODY: dict[float, tuple[float, float, float, float, float, float]] = {
 # Paired-sign oracle recomputed from the committed CSV. CD-CI is positive on
 # 5/5 seeds at every gamma > 0; the exact one-sided sign-test p (binomial
 # tail at 0.5 over the nonzero differences, 1/32 = 0.03125 when 5/5) is
-# computed and pinned below so the response quotes a script-produced number.
-# Blk-CD negative-seed counts are 4/5 at gamma <= 0.3 and 3/5 at gamma >= 0.6;
-# the blanket "4/5" claim holds only for the first two cells.
+# computed and pinned below.
+# Blk-CD negative-seed counts are 4/5 at gamma <= 0.3 and 3/5 at gamma >= 0.6.
 _ORACLE_CDCI_POS: dict[float, int] = {0.3: 5, 0.6: 5, 0.9: 5}
 _ORACLE_CDCI_SIGN_P: dict[float, float] = {0.3: 0.031, 0.6: 0.031, 0.9: 0.031}
 _ORACLE_BLKCD_NEG: dict[float, int] = {0.0: 4, 0.3: 4, 0.6: 3, 0.9: 3}

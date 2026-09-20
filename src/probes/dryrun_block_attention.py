@@ -18,7 +18,7 @@ whenever more than one epoch runs.
 The training step mirrors the paper's engine: AdamW, AMP autocast with
 GradScaler, and gradient-norm clipping at 1.0, so measured memory matches what
 a real run would allocate. Nothing is written to disk; results print as a
-summary table to be transcribed into the decision, not into the paper.
+summary table.
 """
 
 import argparse
