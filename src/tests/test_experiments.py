@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
+import generate_ar1_grid as gag
 import generate_block_cov as gbc
 import paired_stats as ps
 
@@ -71,6 +72,48 @@ def test_covariance_guards():
         gbc.make_block_covariance(C=84, group_size=7, rho_in=1.0)
     with pytest.raises(ValueError):
         gbc.make_block_covariance(C=84, group_size=7, rho_in=0.5, rho_out=0.5)
+
+
+
+# ── AR(1) grid generator ──────────────────────────────────────────────────────
+
+
+def test_ar1_grid_shapes_and_split():
+    cov = gag.build_covariance(7, 0.5)
+    series = gag.generate_ar1(14400, 7, 0.8, cov, seed=42)
+    assert series.shape == (13400, 7)
+    train, val, test = gag.split_normalise(series)
+    assert train.shape == (8040, 7)
+    assert val.shape == (2680, 7)
+    assert test.shape == (2680, 7)
+    assert train.dtype == np.float32
+    assert np.allclose(train.mean(axis=0), 0.0, atol=1e-5)
+    assert np.allclose(train.std(axis=0), 1.0, atol=1e-4)
+    # Training windows at L=512, H=96 match the paper's protocol table.
+    assert 8040 - _SEQ_LEN - _PRED_LEN + 1 == 7433
+
+
+def test_ar1_grid_deterministic_and_correlated():
+    cov = gag.build_covariance(21, 0.9)
+    a = gag.generate_ar1(14400, 21, 0.8, cov, seed=42)
+    b = gag.generate_ar1(14400, 21, 0.8, cov, seed=42)
+    c = gag.generate_ar1(14400, 21, 0.8, cov, seed=123)
+    assert np.array_equal(a, b)
+    assert not np.array_equal(a, c)
+    corr = np.corrcoef(a.T)
+    i, j = np.triu_indices(21, k=1)
+    assert abs(corr[i, j].mean() - 0.9) < 0.02
+
+
+def test_ar1_grid_covariance_guards():
+    with pytest.raises(ValueError):
+        gag.build_covariance(1, 0.5)
+    with pytest.raises(ValueError):
+        gag.build_covariance(7, 1.0)
+    with pytest.raises(ValueError):
+        gag.build_covariance(7, -0.5)
+    with pytest.raises(ValueError):
+        gag.generate_ar1(1000, 7, 0.8, gag.build_covariance(7, 0.5), seed=0)
 
 
 # ── Paired statistics ─────────────────────────────────────────────────────────

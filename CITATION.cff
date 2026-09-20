@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this code or data, please cite the paper below."
+title: "Channel Dependence in PatchTST under Controlled Coupling: code and data"
+authors:
+  - family-names: Mendelowitz
+    given-names: Adi
+    email: adimendelowitz@gmail.com
+version: v1.0-tmlr
+date-released: 2026-09-20
+repository-code: https://github.com/AdiMendelowitz/ci-cd-patchtst
+license: MIT
+preferred-citation:
+  type: article
+  title: "Equal Accuracy, Unequal Cost: Channel Dependence in PatchTST under Controlled Coupling"
+  authors:
+    - family-names: Mendelowitz
+      given-names: Adi
+  journal: Transactions on Machine Learning Research
+  year: 2026
+  url: https://openreview.net/forum?id=aiUZ2y8UNl

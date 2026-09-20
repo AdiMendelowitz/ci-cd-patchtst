@@ -74,6 +74,7 @@ ci-cd-patchtst/
     models_cd_block.py        block-wise cross-variate attention CD variant
                               (revision)
     generators/
+      generate_ar1_grid.py          compound-symmetry AR(1) grid generator
       generate_leader_follower.py   leader-follower VAR(1) generator
       generate_block_cov.py         block-covariance AR(1) generator
     analysis/
@@ -113,8 +114,6 @@ ci-cd-patchtst/
 ```
 
 The cross-variate head is the class `PatchTST_CD_Head` inside `src/models.py`.
-There is no `generate_compound.py`; the AR(1) grid generator is not committed
-(see "Reproducing from scratch").
 
 ## Installation
 
@@ -167,7 +166,9 @@ Every table and figure is recomputed from a committed CSV in `results/` by one
 analysis script. Run each from the repository root. The scripts carry the numbers
 and print them on each run, so this README does not restate result values that
 could drift from the paper. Figure-producing scripts write their PNG into
-`paper/figures/`. Paper-position references below name the content rather than
+`paper/figures/`; the plotted values are fixed by the committed CSVs, but the
+PNG bytes vary across matplotlib and font-rendering builds, so a regenerated
+figure is not expected to be byte-identical to the committed one. Paper-position references below name the content rather than
 table numbers, which the paper's revision renumbered; each script's own header
 states the exact table/figure label it feeds.
 
@@ -194,8 +195,8 @@ states the exact table/figure label it feeds.
 ## Results CSV inventory
 
 `results/` holds every analysis-input CSV, each the committed input to one
-analysis script (`equiv_summary.csv` and `theoretical_bounds.csv` are script
-outputs, committed for reference):
+analysis script (`equiv_summary.csv`, `theoretical_bounds.csv` and `vram_bound.csv` are
+script outputs, committed for reference):
 
 - `results_grid.csv` -- AR(1) grid
 - `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL
@@ -212,6 +213,7 @@ outputs, committed for reference):
 - `results_etth1_b4.csv`, `results_etth1_b4_windows.csv` -- matched-budget ETTh1 rerun with per-window errors
 - `results_grid_C84_block_attn.csv` -- C=84 three-arm cell
 - `theoretical_bounds.csv` -- closed-form CI/CD forecast-error ceilings
+- `vram_bound.csv` -- materialised-attention memory bound at ECL scale against the measured peak
 `results/logs/` carries the stdout logs of the completed ECL CI/CD training
 sessions (`ecl_ci_cd_train_resumable_v*_stdout.txt`), the provenance for the
 paper's per-epoch cost figures, and the P=2 feasibility probe log
@@ -226,7 +228,7 @@ equal compute, block covariance, the block-wise cross-variate attention
 ablation (including its single-cell C=84 AR(1)-grid variant,
 `train_grid_c84_block_attn.ipynb`), and the boundary P=4 gamma-sweep slices
 with their config files. The AR(1) grid's own training notebook is not among
-them and that experiment remains CSV-only; the boundary sweep's original
+them (its generator is committed under `src/generators/`); the boundary sweep's original
 notebooks are committed separately under `notebooks/original/` (see
 Reproducing from scratch).
 
@@ -236,10 +238,12 @@ Reproducing every table and figure from the committed CSVs needs only the analys
 scripts above and the CPU stack installed by `uv sync` or the requirements files.
 Retraining the models from raw synthetic data is partially supported. The
 training notebooks under `notebooks/` retrain the experiments listed above on a
-single T4. The AR(1) grid is the exception: its training notebook
-(`train_grid.ipynb`) and the AR(1) compound-symmetry generator
-(`generate_compound.py`) are not committed, so that experiment reproduces from
-its committed CSVs but cannot be retrained from this repository. The boundary
+single T4. The AR(1) grid is the exception: its generator is committed as
+`src/generators/generate_ar1_grid.py` (the module that produced the series
+for seeds {42, 123, 456}; seeds {789, 1011} used the same process at 14,400
+usable timesteps, as the paper's protocol table records), but its training
+notebook is not, so that experiment's data can be regenerated while the
+training runs themselves reproduce only from the committed CSVs. The boundary
 patch-size sweep's original training notebooks were retrieved on 2026-08-04
 from the Kaggle environment in which they ran and are committed byte-identical
 under `notebooks/original/` (`train_boundary_*.ipynb`); they are
@@ -250,10 +254,12 @@ the revision-era gamma-slice notebooks committed under `notebooks/`, which
 carry their own per-epoch checkpoint/resume protocol.
 The boundary notebooks define their own data generation and windowing, which
 differ from the other engines under `notebooks/`; `notebooks/original/README.md`
-records each file's role and SHA256 and the shared protocol. The leader-follower and block-covariance generators under
-`src/generators/` are committed.
+records each file's role and SHA256 and the shared protocol. The three generators under `src/generators/` are committed.
 
 ## Citation
+
+`CITATION.cff` at the repository root carries the same reference for GitHub's
+"Cite this repository" button.
 
 ```
 @article{mendelowitz2026equalaccuracy,
