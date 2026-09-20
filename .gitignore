@@ -34,6 +34,7 @@ desktop.ini
 checkpoints/
 runs/
 logs/
+!results/logs/
 
 # Raw real-world datasets and regenerable synthetic data (do not track)
 data/
