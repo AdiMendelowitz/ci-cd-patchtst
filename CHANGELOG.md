@@ -4,6 +4,24 @@ Releases are annotated git tags. `v1.0-tmlr` is the tag cited in the paper and
 is not moved; every later change to the public repository is listed here and
 released under a new tag.
 
+## v1.2-tmlr (2026-09-20)
+
+Verification now covers every input and every analysis script.
+
+- `results/SHA256SUMS` lists the digest of every committed results CSV, and
+  `src/reproduce_all.py` verifies all of them before running anything, so a
+  changed, missing or unlisted input fails the sweep whether or not a script
+  reads it. `--write-sums` regenerates the file after a legitimate change.
+- `analyze_synthetic.py`, `analyze_boundary.py`, `analyze_equal_compute.py`
+  and `analyze_block_cov.py` gained oracle checks pinned to the values the
+  paper quotes (Tables 4 and 8, Sections 4.1, 5.2, 5.3 and 5.4) and now exit
+  non-zero when a value does not reproduce, matching the other analysis
+  scripts. Under `v1.1.1-tmlr` those four ran without a pinned target, so a
+  corrupted input to them passed the sweep unless a downstream script caught
+  it.
+- README: quick-start block at the top; the reproduction section describes the
+  two verification layers.
+
 ## v1.1.1-tmlr (2026-09-20)
 
 - `src/reproduce_all.py` runs its child scripts with UTF-8 stdout, and prints

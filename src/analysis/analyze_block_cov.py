@@ -322,7 +322,52 @@ def plot_heatmap(paired: pd.DataFrame, out_path: Path) -> None:
     print(f"\nSaved: {out_path}")
 
 
-def main() -> None:
+# Oracle targets quoted from main.tex Section 5.4 (per-cell CD-CI mean and 95% CI,
+# 4 dp; grand mean and 95% CI, 4 dp; rho_in slope, 4 dp, its p, 3 dp, and R2, 2 dp).
+_ORACLE_CELLS: dict[tuple[int, float], tuple[float, float, float]] = {
+    (21, 0.5): (0.0028, 0.0015, 0.0040),
+    (21, 0.9): (-0.0062, -0.0137, 0.0013),
+    (84, 0.5): (0.0005, -0.0005, 0.0016),
+    (84, 0.9): (0.0000, -0.0010, 0.0010),
+}
+_ORACLE_GRAND: dict[str, float] = {"mean": -0.0007, "ci_lo": -0.0028, "ci_hi": 0.0014}
+_ORACLE_SLOPE: dict[str, float] = {"coef_rho_in": -0.0118, "p_rho_in": 0.013, "r2": 0.35}
+
+
+def _oracle_check(paired: pd.DataFrame, gm: dict, lm: dict) -> tuple[list[str], bool]:
+    """Compare recomputed values against the targets quoted from main.tex."""
+    lines: list[str] = []
+    ok_all = True
+    rows = {_cell_key(r["C"], r["rho_in"]): r for _, r in paired.iterrows()}
+    for key, (t_mean, t_lo, t_hi) in _ORACLE_CELLS.items():
+        if key not in rows:
+            ok_all = False
+            lines.append(f"  [FAIL] C={key[0]} rho_in={key[1]}: cell absent from the input")
+            continue
+        row = rows[key]
+        got = (round(float(row["mean_diff"]), 4), round(float(row["ci_lo"]), 4), round(float(row["ci_hi"]), 4))
+        ok = got == (t_mean, t_lo, t_hi)
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] C={key[0]} rho_in={key[1]}: CD-CI {got[0]:+.4f} "
+                     f"[{got[1]:+.4f}, {got[2]:+.4f}]  target {t_mean:+.4f} [{t_lo:+.4f}, {t_hi:+.4f}]")
+    got_grand = {k: round(float(gm[k]), 4) for k in _ORACLE_GRAND}
+    for name, target in _ORACLE_GRAND.items():
+        ok = got_grand[name] == target
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] grand {name}: {got_grand[name]:+.4f}  target {target:+.4f}")
+    got_slope = {
+        "coef_rho_in": round(float(lm["coef_rho_in"]), 4),
+        "p_rho_in": round(float(lm["p_rho_in"]), 3),
+        "r2": round(float(lm["r2"]), 2),
+    }
+    for name, target in _ORACLE_SLOPE.items():
+        ok = got_slope[name] == target
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] {name}: {got_slope[name]:+.4f}  target {target:+.4f}")
+    return lines, ok_all
+
+
+def main() -> int:
     csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else _RESULTS_PATH
     df = load_results(csv_path)
 
@@ -332,7 +377,8 @@ def main() -> None:
 
     if not report["usable"]:
         print("\nNo cell has enough paired seeds to analyse yet.")
-        return
+        print("\nRESULT: FAIL - no usable cell")
+        return 1
 
     diff_usable = filter_to_cells(diff, report["usable"])
     df_usable = filter_to_cells(df, report["usable"])
@@ -353,11 +399,18 @@ def main() -> None:
         print("\n=== PAPER PROSE AND FIGURE WITHHELD ===")
         print("The design is not yet complete at the canonical seed count; rerun once every")
         print("cell is filled to emit the paragraph and write the figure.")
-        return
+        print("\nRESULT: FAIL - design incomplete")
+        return 1
 
     print_latex_prose(paired, gm, lm, half_width, len(diff_usable))
     plot_heatmap(paired, _FIGURES_DIR / "heatmap_block_cov.png")
 
+    print("\n=== ORACLE CHECK (main.tex Section 5.4) ===")
+    check_lines, all_pass = _oracle_check(paired, gm, lm)
+    print("\n".join(check_lines))
+    print(f"\nRESULT: {'PASS - block-covariance cells reproduce' if all_pass else 'FAIL - see lines above'}")
+    return 0 if all_pass else 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

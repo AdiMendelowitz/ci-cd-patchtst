@@ -37,7 +37,10 @@ experimental inputs: `equiv_summary.csv`, `theoretical_bounds.csv` and
 committed copy.
 
 Notebooks write to `/kaggle/working/<name>.csv`; the file is then committed
-under `results/`.
+under `results/`. `SHA256SUMS` in this directory lists the digest of every CSV
+(computed with CRLF normalised to LF) and is checked by `src/reproduce_all.py`
+before any analysis runs; regenerate it with `--write-sums` when a file changes
+legitimately.
 
 ## Training-run files with the shared schema
 

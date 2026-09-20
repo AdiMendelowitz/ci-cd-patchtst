@@ -28,6 +28,18 @@ roughly 956 s against roughly 143 s for CI at the same batch size, about 4.5
 GPU-hours for the completed H=336 run. On accuracy per unit compute, CI is the
 better default.
 
+## Quick start
+
+```
+uv sync --all-groups
+uv run python src/reproduce_all.py --tests
+```
+
+This verifies every results file against its committed digest, runs the unit
+tests, and recomputes every table and figure in the paper, each checked against
+the values the paper quotes; it takes under a minute on a CPU (see Reproducing
+the paper).
+
 ## Key result
 
 On the AR(1) grid the grand-mean CD minus CI difference is +0.0013 MSE over five
@@ -113,6 +125,7 @@ ci-cd-patchtst/
                               2026-08-04 (see Notebooks)
   results/                    committed result CSVs (see inventory)
     SCHEMA.md                 every CSV, its writer and readers, every column
+    SHA256SUMS                digest of every CSV, checked by reproduce_all.py
     logs/                     stdout logs of the ECL training sessions and the
                               P=2 feasibility probe
 ```
@@ -207,9 +220,15 @@ analysis script. To run the whole table at once, from the repository root:
 python src/reproduce_all.py --tests
 ```
 
-This runs the unit tests and then every command below, fails on any non-zero
-exit or any `RESULT:` line that is not `PASS`, and ends with a summary; a full
-run takes under a minute on CPU. The individual commands follow, each run from
+This first verifies every `results/*.csv` against `results/SHA256SUMS`
+(line endings normalised), then runs the unit tests and every command below,
+and fails on any non-zero exit or any `RESULT:` line that is not `PASS`. Every
+analysis script ends with an oracle check pinned to the values the paper quotes
+for it, so a changed input fails twice: at the digest and at the number. The
+two `derive_*` scripts compare their closed-form output against the committed
+file instead. A full run takes under a minute on CPU. If a results file changes
+legitimately, `python src/reproduce_all.py --write-sums` regenerates the digest
+file, to be committed with it. The individual commands follow, each run from
 the repository root. The scripts carry the numbers and print them on each run,
 so the table does not restate result values that could drift from the paper
 (the Key result section above quotes the headline figures; the scripts are the
@@ -226,7 +245,7 @@ states the exact table/figure label it feeds.
 | ETTh1 and ECL tables and figure | `python src/analysis/analyze_realdata.py` | `results/results_etth1.csv`, `results/results_ecl.csv` | ETTh1 per-horizon paired CD-CI; ECL CI/CD summary; writes `paper/figures/real_data.png` |
 | ETTh1 coupling-subgroup contrast | `python src/analysis/analyze_etth1_subgroup.py` | `results/etth1_coupling_partition.csv`, matched-budget ETTh1 window results | high- versus low-coupling subgroup CD-CI with oracle self-check |
 | Leader-follower gamma sweep and slope | `python src/analysis/analyze_leader_follower.py` | `results/results_leader_follower.csv` | per-gamma CI, CD, and DLinear means and the gamma slope, with an oracle self-check |
-| Boundary patch-size table and heatmap | `python src/analysis/analyze_boundary.py results/results_boundary_p4_ci.csv results/results_boundary.csv results/results_boundary_p4_gamma0_complete.csv results/results_boundary_p4_gamma03_complete.csv results/results_boundary_p4_gamma06_complete.csv results/results_boundary_p4_gamma09_complete.csv` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv`, plus the four P=4 `*_complete.csv` files (without them the P=4 row renders as not run) | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
+| Boundary patch-size table and heatmap | `python src/analysis/analyze_boundary.py results/results_boundary_p4_ci.csv results/results_boundary.csv results/results_boundary_p4_gamma0_complete.csv results/results_boundary_p4_gamma03_complete.csv results/results_boundary_p4_gamma06_complete.csv results/results_boundary_p4_gamma09_complete.csv` | `results/results_boundary_p4_ci.csv`, `results/results_boundary.csv`, plus the four P=4 `*_complete.csv` files (without them the P=4 row renders as not run and the oracle check fails) | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
 | Selection-rule diagnostic and trajectories | `python src/analysis/analyze_overtrain.py` | `results/results_overtrain_summary.csv`, `results/results_overtrain_diag.csv` | selection-rule effect sizes; writes `paper/figures/diag_overlay_clean.png` |
 | Matched-compute control | `python src/analysis/analyze_equal_compute.py` | `results/results_equal_compute.csv` | matched-budget CD-CI with a validity gate on the update budget |
 | Cross-variate-head control | `python src/analysis/analyze_cd_head.py` | `results/results_cd_head.csv` | cross-variate-head contrasts against CI and CD |
@@ -245,7 +264,7 @@ states the exact table/figure label it feeds.
 `results/` holds every analysis-input CSV, each the committed input to one
 analysis script (`equiv_summary.csv`, `theoretical_bounds.csv` and `vram_bound.csv` are
 script outputs, committed for reference). `results/SCHEMA.md` documents every
-column of every file:
+column of every file and `results/SHA256SUMS` carries each file's digest:
 
 - `results_grid.csv` -- AR(1) grid
 - `results_etth1.csv`, `results_ecl.csv` -- ETTh1 and ECL

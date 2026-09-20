@@ -1,10 +1,13 @@
 """Run every analysis command from the README reproduction table and report.
 
-Each command is run from the repository root with the current interpreter.
-A command fails when it exits non-zero or, for a script that prints a
-``RESULT:`` line, when that line does not read ``RESULT: PASS``. The run
-stops with exit code 1 if any command failed, so a broken reproduction path
-is caught before a change is committed. Figure files rewritten by the
+The run first verifies every ``results/*.csv`` against ``results/SHA256SUMS``
+(line endings normalised), so a changed, missing or unlisted input fails
+before any script runs. Each command is then run from the repository root
+with the current interpreter. A command fails when it exits non-zero or when
+its ``RESULT:`` line does not read ``RESULT: PASS``; every analysis script
+prints one, pinned to the values quoted in the paper. The run exits 1 if
+anything failed, so a broken reproduction path is caught before a change is
+committed. Figure files rewritten by the
 scripts are listed for information; their bytes are not expected to match
 the committed files across matplotlib builds, so a rewritten figure is not a
 failure.
@@ -13,6 +16,7 @@ Usage, from the repository root:
     python src/reproduce_all.py            # every command in the table
     python src/reproduce_all.py --tests    # also run the unit tests first
     python src/reproduce_all.py --quiet    # summary only; failed commands still print
+    python src/reproduce_all.py --write-sums   # regenerate results/SHA256SUMS
 """
 
 import argparse
@@ -25,6 +29,8 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FIGURES = _ROOT / "paper" / "figures"
+_RESULTS = _ROOT / "results"
+_SUMS = _RESULTS / "SHA256SUMS"
 
 # One entry per row of the README reproduction table, in table order.
 COMMANDS: list[tuple[str, list[str]]] = [
@@ -67,6 +73,63 @@ def _figure_digests() -> dict[str, str]:
     }
 
 
+def _sha256(path: Path) -> str:
+    """Digest of the file with CRLF normalised to LF, so a checkout with either
+    line-ending convention yields the same value."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def check_input_digests() -> tuple[int, str]:
+    """Verify every results CSV against results/SHA256SUMS before anything runs.
+
+    Returns (exit code, report). A missing, extra or altered file is a failure:
+    the oracles inside the scripts catch drift in the numbers they pin, this
+    check catches any change to any input, including columns no script reads.
+    """
+    if not _SUMS.exists():
+        return 1, f"{_SUMS.relative_to(_ROOT)} is missing\n"
+    expected: dict[str, str] = {}
+    for line in _SUMS.read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.startswith("#"):
+            digest, name = line.split(None, 1)
+            expected[name.strip().lstrip("*")] = digest
+    present = {p.name for p in _RESULTS.glob("*.csv")}
+    lines: list[str] = []
+    bad = 0
+    for name in sorted(expected):
+        path = _RESULTS / name
+        if not path.exists():
+            lines.append(f"  [FAIL] {name}: listed in SHA256SUMS but missing")
+            bad += 1
+            continue
+        got = _sha256(path)
+        ok = got == expected[name]
+        bad += 0 if ok else 1
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] {name}" + ("" if ok else f": digest {got[:12]}... differs"))
+    for name in sorted(present - set(expected)):
+        lines.append(f"  [FAIL] {name}: present but not listed in SHA256SUMS")
+        bad += 1
+    verified = max(len(expected) - bad, 0)
+    report = "\n".join(lines) + f"\n{verified}/{len(expected)} listed files verified\n"
+    return (1 if bad else 0), report
+
+
+def write_input_digests() -> int:
+    """Regenerate results/SHA256SUMS from the CSVs present. Run this only when a
+    results file has legitimately changed, and commit the new file with it."""
+    lines = [
+        "# SHA256 of every committed results/*.csv, computed with CRLF normalised to LF.",
+        "# Verified by src/reproduce_all.py before any analysis runs. Regenerate with",
+        "#   python src/reproduce_all.py --write-sums",
+        "# only when a results file has legitimately changed, and commit both together.",
+    ]
+    paths = sorted(_RESULTS.glob("*.csv"))
+    lines += [f"{_sha256(p)}  {p.name}" for p in paths]
+    _SUMS.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(paths)} digests to {_SUMS.relative_to(_ROOT)}")
+    return 0
+
+
 def _run(args: list[str], quiet: bool) -> tuple[int, str]:
     # The child's stdout is a pipe, whose default encoding on Windows is the
     # ANSI code page; force UTF-8 so scripts that print non-ASCII do not fail
@@ -87,10 +150,21 @@ def main() -> int:
     parser.add_argument("--tests", action="store_true", help="run the unit tests first")
     parser.add_argument("--quiet", action="store_true",
                         help="print the summary only, plus the output of any failed command")
+    parser.add_argument("--write-sums", action="store_true",
+                        help="regenerate results/SHA256SUMS from the CSVs present and exit")
     opts = parser.parse_args()
+    if opts.write_sums:
+        return write_input_digests()
 
     results: list[tuple[str, str, float]] = []
     before = _figure_digests()
+
+    print("===== Input integrity: results/*.csv against results/SHA256SUMS =====")
+    t0 = time.time()
+    code, report = check_input_digests()
+    if not opts.quiet or code != 0:
+        print(report, end="")
+    results.append(("Input integrity (SHA256SUMS)", "PASS" if code == 0 else "FAIL", time.time() - t0))
 
     if opts.tests:
         t0 = time.time()

@@ -831,8 +831,67 @@ def plot_heatmap(ratios: pd.DataFrame, out_path: Path) -> None:
 # -- Main ----------------------------------------------------------------------
 
 
-def main() -> None:
-    """Run the full boundary analysis and write the heatmap."""
+# Oracle targets quoted from main.tex: Table 8 (CD/CI per (P, gamma) cell and the
+# CI-only P=2 entries, 4 dp) and the Section 5.3 gamma slope (coefficient and
+# 95% CI, 4 dp; p, 2 dp), fitted on the original-environment P=8 and P=16 cells.
+_ORACLE_RATIO: dict[tuple[int, float], float] = {
+    (16, 0.0): 1.0012, (16, 0.3): 1.0004, (16, 0.6): 1.0005, (16, 0.9): 1.0010,
+    (8, 0.0): 1.0014, (8, 0.3): 1.0009, (8, 0.6): 1.0009, (8, 0.9): 1.0004,
+    (4, 0.0): 0.9997, (4, 0.3): 1.0004, (4, 0.6): 1.0002, (4, 0.9): 1.0004,
+}
+_ORACLE_CI_ONLY: dict[tuple[int, float], float] = {(2, 0.6): 0.9806, (2, 0.9): 0.9801}
+_ORACLE_SLOPE: dict[str, float] = {
+    "coef_gamma": -0.0006, "ci_lo_gamma": -0.0021, "ci_hi_gamma": 0.0009, "p_gamma": 0.44,
+}
+
+
+def _oracle_check(ratios: pd.DataFrame, ci_only: pd.DataFrame, lm: dict[str, object]) -> tuple[list[str], bool]:
+    """Compare recomputed values against the targets quoted from main.tex."""
+    lines: list[str] = []
+    ok_all = True
+    seen: set[tuple[int, float]] = set()
+    for _, row in ratios.iterrows():
+        key = (int(row["patch_size"]), round(float(row["gamma"]), 6))
+        seen.add(key)
+        got = round(float(row["ratio"]), 4)
+        target = _ORACLE_RATIO.get(key)
+        ok = target is not None and got == target
+        ok_all = ok_all and ok
+        shown = f"{target:.4f}" if target is not None else "no oracle entry"
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] P={key[0]} gamma={key[1]}: CD/CI {got:.4f}  target {shown}")
+    for key in sorted(set(_ORACLE_RATIO) - seen):
+        ok_all = False
+        lines.append(f"  [FAIL] P={key[0]} gamma={key[1]}: no paired cell in the input, "
+                     f"target {_ORACLE_RATIO[key]:.4f}")
+    ci_seen: set[tuple[int, float]] = set()
+    for _, row in ci_only.iterrows():
+        key = (int(row["patch_size"]), round(float(row["gamma"]), 6))
+        ci_seen.add(key)
+        got = round(float(row["mean"]), 4)
+        target = _ORACLE_CI_ONLY.get(key)
+        ok = target is not None and got == target
+        ok_all = ok_all and ok
+        shown = f"{target:.4f}" if target is not None else "no oracle entry"
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] P={key[0]} gamma={key[1]} CI-only mean {got:.4f}  target {shown}")
+    for key in sorted(set(_ORACLE_CI_ONLY) - ci_seen):
+        ok_all = False
+        lines.append(f"  [FAIL] P={key[0]} gamma={key[1]}: no CI-only cell in the input, "
+                     f"target {_ORACLE_CI_ONLY[key]:.4f}")
+    got_slope = {
+        "coef_gamma": round(float(lm["coef_gamma"]), 4),
+        "ci_lo_gamma": round(float(lm["ci_lo_gamma"]), 4),
+        "ci_hi_gamma": round(float(lm["ci_hi_gamma"]), 4),
+        "p_gamma": round(float(lm["pval_gamma"]), 2),
+    }
+    for name, target in _ORACLE_SLOPE.items():
+        ok = got_slope[name] == target
+        ok_all = ok_all and ok
+        lines.append(f"  [{'PASS' if ok else 'FAIL'}] {name}: {got_slope[name]:+.4f}  target {target:+.4f}")
+    return lines, ok_all
+
+
+def main() -> int:
+    """Run the full boundary analysis, write the heatmap and check the oracle."""
     current_paths: list[Path] = []
     if len(sys.argv) >= 3:
         path_a = Path(sys.argv[1])
@@ -874,6 +933,12 @@ def main() -> None:
     print_latex_prose(paired, lm, steps, batch, reg_paired)
     plot_heatmap(ratios, _FIGURES_DIR / "boundary_heatmap.png")
 
+    print("\n=== ORACLE CHECK (main.tex Table 8 and the Section 5.3 gamma slope) ===")
+    check_lines, all_pass = _oracle_check(ratios, ci_only, lm)
+    print("\n".join(check_lines))
+    print(f"\nRESULT: {'PASS - Table 8 and the gamma slope reproduce' if all_pass else 'FAIL - see lines above'}")
+    return 0 if all_pass else 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
