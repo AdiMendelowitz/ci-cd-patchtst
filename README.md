@@ -169,21 +169,17 @@ for example `python src/analysis/analyze_synthetic.py`.
 | Theoretical forecast-error ceilings | `derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; compares against the committed `results/theoretical_bounds.csv` and writes it only if absent |
 | Granger non-causality | `validate_granger.py` | generates data internally | Granger non-causality battery (console only) |
 
-All input paths are relative to `results/`. `analyze_boundary.py` takes its
-inputs as arguments; the invocation the runner uses is:
+All input paths are relative to `results/`. `analyze_boundary.py` resolves its
+six input files (the two base CSVs and the four `*_complete.csv` gamma
+tranches) automatically when run with no arguments:
 
 ```bash
-python src/analysis/analyze_boundary.py \
-  results/results_boundary_p4_ci.csv \
-  results/results_boundary.csv \
-  results/results_boundary_p4_gamma0_complete.csv \
-  results/results_boundary_p4_gamma03_complete.csv \
-  results/results_boundary_p4_gamma06_complete.csv \
-  results/results_boundary_p4_gamma09_complete.csv
+python src/analysis/analyze_boundary.py
 ```
 
-Without the four `*_complete.csv` files the P=4 row renders as not run and the
-oracle check fails.
+Pass the six paths explicitly (same order `reproduce_all.py` uses) to point
+it at a different results directory. Without the four `*_complete.csv` files
+the P=4 row renders as not run and the oracle check fails.
 
 </details>
 

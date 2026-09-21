@@ -114,6 +114,12 @@ _FIGURES_DIR = _ROOT / "paper" / "figures"
 
 _NAME_P4_CI = "results_boundary_p4_ci.csv"
 _NAME_BOUNDARY = "results_boundary.csv"
+_NAMES_GAMMA_COMPLETE = [
+    "results_boundary_p4_gamma0_complete.csv",
+    "results_boundary_p4_gamma03_complete.csv",
+    "results_boundary_p4_gamma06_complete.csv",
+    "results_boundary_p4_gamma09_complete.csv",
+]
 
 # Internal provenance tag attached at load time. Rows from the original-environment
 # CSVs are "original"; rows from a merged P=4 tranche are "current". The tag drives
@@ -900,6 +906,7 @@ def main() -> int:
     elif len(sys.argv) == 1:
         path_a = resolve_csv(_NAME_P4_CI)
         path_b = resolve_csv(_NAME_BOUNDARY)
+        current_paths = [resolve_csv(name) for name in _NAMES_GAMMA_COMPLETE]
     else:
         raise SystemExit(
             "Usage: python analyze_boundary.py "
