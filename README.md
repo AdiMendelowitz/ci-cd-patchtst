@@ -12,7 +12,9 @@ revision round; reviewed on [OpenReview](https://openreview.net/forum?id=aiUZ2y8
 
 **The full reproduction sweep runs in under a minute on CPU.** Every results file
 is verified against a committed digest before any analysis runs, and every
-analysis script ends in an oracle check pinned to the values the paper quotes.
+analysis command except the compute-versus-accuracy figure and the Granger
+battery ends in a check against the values the paper quotes or a committed
+reference file.
 
 [Quick start](#quick-start) · [Key result](#key-result) · [Data](#data) ·
 [Reproducing the paper](#reproducing-the-paper) · [Installation](#installation) ·
@@ -24,8 +26,8 @@ Comparisons of CI and CD forecasting models are usually run on observational
 benchmarks where correlation strength, dimensionality, and temporal dynamics all
 vary together, which leaves any single CI win impossible to attribute to one
 cause. This project isolates those factors one at a time using synthetic
-generative processes with known structure, and treats ETTh1 and ECL as
-contextual anchors rather than primary evidence.
+generative processes with known structure. ETTh1 and ECL serve as contextual
+anchors; the synthetic families carry the primary evidence.
 
 Three synthetic families are studied: a factorial AR(1) process with
 compound-symmetry covariance (instantaneous correlation only), a leader-follower
@@ -34,37 +36,40 @@ block-covariance family.
 
 ## Key result
 
-Neither mode wins on accuracy once each model is selected fairly. What does not
-equalise is cost.
+On the synthetic families, neither mode holds a practically relevant accuracy
+advantage once each model is selected fairly, while CD costs far more to train.
+On the observational ETTh1 data, CI keeps a small but reliable edge.
 
 | Quantity | Value |
 | --- | --- |
 | Grand-mean CD − CI, AR(1) grid, 5 seeds | **+0.0013 MSE** (+0.13% of the CI mean) |
 | Seed-clustered 95% confidence interval | [−0.0023, +0.0048] |
 | Pre-specified practical-equivalence band | ±1% relative MSE |
-| Per-cell 95% detection half-width | 0.0063 MSE (≈0.62% of the CI mean) |
-| ECL epoch cost, CD vs CI at the same batch size | ≈956 s vs ≈143 s |
+| Pooled within-cell 95% detection half-width | 0.0063 MSE (≈0.62% of the CI mean) |
+| ECL epoch cost, CD vs CI at batch 8, H=336 | ≈956 s vs ≈143 s |
 | CD batch size at 84 variates, materialised attention | 1 |
 
 ![Accuracy versus compute for CI and CD](paper/figures/compute_accuracy.png)
 
-The half-width is the smallest per-cell mean difference whose interval would
-exclude zero, so any per-cell CD advantage, where present, is bounded below it:
-a measured bound rather than a failure to reject.
+Every per-cell CD − CI difference on the AR(1) grid falls inside the pooled
+half-width (the largest is ±0.0054 MSE), and any uniform CD advantage larger
+than the half-width would have moved the grand-mean interval off zero. The
+bound is measured, so it limits the size of any undetected CD gain.
 
-A fair-protocol robustness suite — an instrumented selection-rule diagnostic,
-matched gradient-update budgets, a cross-variate prediction head, and the
-block-covariance family — shows that the apparent CD deficit under lagged
-coupling stays inside the 1% band under every selection rule and protocol
-variant tried, is comparable to run-to-run variation at five seeds, and is not
-produced by checkpoint selection, since the training protocol already restores
-validation-best weights.
+Under lagged (leader-follower) coupling, an apparent CD deficit appears on the
+original early-stopping protocol and grows with the coupling strength, staying
+inside the 1% band throughout. It is not a checkpoint-selection artefact, since
+the protocol already restores validation-best weights, and fresh reruns of the
+γ = 0.6 cell show a run-to-run spread comparable to the effect at five seeds.
+Matching the gradient-update budget removes the deficit, and a cross-variate
+prediction head ties CI at every γ. A block-covariance family extends the
+no-advantage finding beyond compound-symmetry correlation.
 
 A closed-form analysis of the generative model shows the near-parity is
 expected: at the evaluation horizon the full-information and own-history
 Bayes-optimal forecast-error ceilings coincide for every tested coupling
 strength. The flattened-token CD formulation, meanwhile, needs smaller feasible
-batches and far more gradient steps per epoch — about 4.5 GPU-hours for the
+batches and far more gradient steps per epoch, about 4.5 GPU-hours for the
 completed H=336 ECL run. On accuracy per unit compute, CI is the better default.
 
 ## Quick start
@@ -88,16 +93,18 @@ the values the paper quotes. It takes under a minute on a CPU.
 **ETTh1** is the hourly file of the ETT-small collection released with Informer
 (Zhou et al., AAAI 2021) at <https://github.com/zhouhaoyi/ETDataset>, whose
 LICENSE file is CC BY-ND 4.0. The notebooks read `ETTh1.csv` (17,420 rows,
-7 variates after the date column) and use the standard fixed split of
-8,640 / 2,880 / 2,880 rows (`TRAIN_END = 8640`, `VAL_END = 11520` in
-`train_etth1.ipynb` and `train_etth1_b4.ipynb`).
+7 variates after the date column) and split it by timestep with
+`TRAIN_END = 8640` and `VAL_END = 11520` in `train_etth1.ipynb` and
+`train_etth1_b4.ipynb`: 8,640 training rows, 2,880 validation rows, and every
+remaining row (11,520 to 17,419, i.e. 5,900 rows) as the test slice.
 
 **ECL** is the 321-client hourly `electricity.csv` distributed with the
 Autoformer, Time-Series-Library and iTransformer repositories (THUML), derived
 from the UCI ElectricityLoadDiagrams20112014 dataset (Trindade, 2015,
 <https://doi.org/10.24432/C58C86>, CC BY 4.0; 370 clients at 15-minute
 resolution in the original). The ECL notebook applies the iTransformer
-proportions to the row count it finds (`train_end = int(n * 0.6012)`,
+proportions to the row count it finds (in `ecl_ci_cd_train_resumable.ipynb`,
+the writer of `results_ecl.csv`: `train_end = int(n * 0.6012)`,
 `val_end = train_end + int(n * 0.1995)`), which on the 26,304-row file used
 gives 15,813 / 5,247 / 5,244 rows; the paper's dataset section records the
 26,304 versus 26,352 row-count difference against the iTransformer paper.
@@ -121,11 +128,15 @@ python src/reproduce_all.py --tests
 **Two verification layers.** The runner first checks every `results/*.csv`
 against `results/SHA256SUMS` (line endings normalised), failing on any changed,
 missing or unlisted file whether or not a script reads it. It then runs the unit
-tests and every analysis command, failing on any non-zero exit or any `RESULT:`
-line that is not `PASS`. Each analysis script ends in an oracle check pinned to
-the values the paper quotes for it, so a changed input fails twice: at the
-digest and at the number. The two `derive_*` scripts compare their closed-form
-output against the committed file instead.
+tests and every analysis command. A command fails when it exits non-zero, or
+when it prints a `RESULT:` line and none of its output reads `RESULT: PASS`.
+The thirteen `analyze_*` commands end in an oracle check pinned to the values
+the paper quotes, so a changed input to them fails twice: at the digest and at
+the number. The two `derive_*` scripts compare their closed-form output against
+the committed file instead. `make_compute_accuracy_fig.py` and
+`validate_granger.py` print no `RESULT:` line and exit 0 on completion, so the
+runner checks only that they ran; the Granger battery's own PASS/EXPECTED/FAIL
+verdict is printed to the console and does not fail the sweep.
 
 If a results file changes legitimately, `python src/reproduce_all.py
 --write-sums` regenerates the digest file, to be committed alongside it.
@@ -139,12 +150,12 @@ If a results file changes legitimately, `python src/reproduce_all.py
 The scripts carry the numbers and print them on each run, so the table below
 does not restate result values that could drift from the paper; the
 [Key result](#key-result) section quotes the headline figures and the scripts
-are the source. Paper-position references name the content rather than table
-numbers, which the paper's revision renumbered; each script's own header states
-the exact table/figure label it feeds.
+are the source. Paper-position references name the content instead of table
+numbers, which the paper's revision renumbered; several script headers also
+name the table or section they feed.
 
 <details>
-<summary><b>Per-experiment commands</b> — 17 scripts, to run individually</summary>
+<summary><b>Per-experiment commands</b>: 17 scripts, to run individually</summary>
 
 Every script below lives in `src/analysis/` and is run from the repository root,
 for example `python src/analysis/analyze_synthetic.py`.
@@ -152,18 +163,18 @@ for example `python src/analysis/analyze_synthetic.py`.
 | Paper claim | Script | Reads | Prints / writes |
 | --- | --- | --- | --- |
 | AR(1) grid table and heatmap | `analyze_synthetic.py` | `results_grid.csv` | per-cell and grand-mean CD-CI, regression; writes `paper/figures/heatmap.png` |
-| ETTh1 and ECL tables and figure | `analyze_realdata.py` | `results_etth1.csv`, `results_ecl.csv` | ETTh1 per-horizon paired CD-CI; ECL CI/CD summary; writes `paper/figures/real_data.png` |
-| ETTh1 coupling-subgroup contrast | `analyze_etth1_subgroup.py` | `etth1_coupling_partition.csv`, matched-budget ETTh1 window results | high- versus low-coupling subgroup CD-CI with oracle self-check |
+| ETTh1 and ECL tables and figure | `analyze_realdata.py` | `results_etth1.csv`, `results_ecl.csv`; optionally `realdata_corr_summary.csv`, `realdata_lag_summary.csv` | ETTh1 per-horizon paired CD-CI; ECL CI/CD summary; writes `paper/figures/real_data.png` |
+| ETTh1 coupling-subgroup contrast | `analyze_etth1_subgroup.py` | `etth1_coupling_partition.csv`, `results_etth1_b4.csv`, `results_etth1_b4_windows.csv` | high- versus low-coupling subgroup CD-CI with oracle self-check |
 | Leader-follower gamma sweep and slope | `analyze_leader_follower.py` | `results_leader_follower.csv` | per-gamma CI, CD, and DLinear means and the gamma slope, with an oracle self-check |
 | Boundary patch-size table and heatmap | `analyze_boundary.py` (see note below) | `results_boundary_p4_ci.csv`, `results_boundary.csv`, plus the four P=4 `*_complete.csv` files | per-cell CD-CI across patch sizes and the boundary regression; writes `paper/figures/boundary_heatmap.png` |
 | Selection-rule diagnostic and trajectories | `analyze_overtrain.py` | `results_overtrain_summary.csv`, `results_overtrain_diag.csv` | selection-rule effect sizes; writes `paper/figures/diag_overlay_clean.png` |
 | Matched-compute control | `analyze_equal_compute.py` | `results_equal_compute.csv` | matched-budget CD-CI with a validity gate on the update budget |
 | Cross-variate-head control | `analyze_cd_head.py` | `results_cd_head.csv` | cross-variate-head contrasts against CI and CD |
-| Block-covariance family | `analyze_block_cov.py` | `results_block_cov.csv` | block-covariance per-cell CD-CI and the rho_in slope |
+| Block-covariance family | `analyze_block_cov.py` | `results_block_cov.csv` | block-covariance per-cell CD-CI and the rho_in slope; writes `paper/figures/heatmap_block_cov.png` (not used in the paper) |
 | Block-wise attention ablation | `analyze_block_attention.py` | `results_block_attention.csv`, `diag_b5_gamma06.csv` | three-arm CI/CD/CD_Block contrasts and the gradient-norm and participation-ratio diagnostics |
 | P=4 boundary cells (all four gamma) | `analyze_boundary_p4.py` | `results_boundary_p4_gamma{0,03,06,09}_complete.csv`, `results_boundary_p4_ci.csv` | per-gamma paired CD-CI at P=4 with oracle self-check |
 | C=84 three-arm block-attention cell | `analyze_boundary_c84.py` | `results_grid_C84_block_attn.csv` | CI/CD/CD_Block contrasts at C=84, rho=0.5, with oracle self-check |
-| Compute-versus-accuracy figure | `make_compute_accuracy_fig.py --outdir paper/figures` | `results_leader_follower.csv`, `results_grid.csv` | writes `paper/figures/compute_accuracy.png` |
+| Compute-versus-accuracy figure | `make_compute_accuracy_fig.py --outdir paper/figures` | `results_leader_follower.csv`, `results_grid.csv` | writes `paper/figures/compute_accuracy.png` and `compute_accuracy.pdf` |
 | Attention-memory bound and measured peak | `derive_vram_bound.py` | architecture constants and the measured peak allocations recorded in the script | materialised-attention bound at ECL scale against the measured peak; compares against `results/vram_bound.csv` |
 | Practical-equivalence summary | `analyze_equiv_table.py` | `results_grid.csv`, `results_cd_head.csv`, `results_overtrain_summary.csv`, `results_equal_compute.csv`, `results_block_cov.csv` | recomputes all twelve equivalence rows with mean and CI oracle checks; writes `results/equiv_summary.csv` |
 | Theoretical forecast-error ceilings | `derive_theoretical_bounds.py` | generates in closed form | CI and CD Bayes-ceiling table; compares against the committed `results/theoretical_bounds.csv` and writes it only if absent |
@@ -234,9 +245,12 @@ reported and no failures.
 
 ## Results files
 
-`results/` holds every analysis-input CSV, each the committed input to one
-analysis script; `equiv_summary.csv`, `theoretical_bounds.csv` and
-`vram_bound.csv` are script outputs, committed for reference.
+`results/` holds every analysis-input CSV; some are read by more than one
+script (`results_grid.csv` feeds three). `equiv_summary.csv`,
+`theoretical_bounds.csv` and `vram_bound.csv` are analysis-script outputs,
+committed for reference, and `realdata_corr_summary.csv`,
+`realdata_lag_summary.csv` and `etth1_coupling_partition.csv` are written from
+the raw data by the two scripts named under [Data](#data).
 
 - **[`results/SCHEMA.md`](results/SCHEMA.md)** documents every file, its writer
   and readers, and the meaning of every column, including the conventions that
@@ -286,8 +300,8 @@ ci-cd-patchtst/
     references.bib
     tmlr.sty, tmlr.bst,       TMLR style files, as distributed by the journal
     fancyhdr.sty
-    figures/                  PNGs referenced by main.tex, written by the
-                              analysis scripts below
+    figures/                  figures written by the analysis scripts below;
+                              main.tex includes five of the PNGs
   src/
     models.py                 PatchTST CI and CD modes, the PatchTST_CD_Head
                               cross-variate head, TrueDLinear, and build_model
@@ -317,6 +331,8 @@ ci-cd-patchtst/
       derive_vram_bound.py          attention-memory bound derivation and
                                     measured-peak comparison (revision)
       validate_granger.py           Granger non-causality battery
+      measure_lag_structure.py      ETTh1/ECL correlation and lag summaries
+                                    (needs the raw data under data/)
       partition_etth1_coupling.py   ETTh1 coupling-partition scoring (revision)
       paired_stats.py               shared paired-difference library
     probes/                   T4 feasibility probes (P=2 boundary, ECL stage-0,
@@ -377,9 +393,12 @@ single T4.
 
 The boundary patch-size sweep's original training notebooks were retrieved on
 2026-08-04 from the Kaggle environment in which they ran and are committed
-byte-identical under `notebooks/original/` (`train_boundary_*.ipynb`); they are
-Kaggle-environment notebooks (T4, `/kaggle/working` paths) covering the original
-grid (P in {2, 8, 16}) at n=5 and the original P=4 CI cells at n=3. The full P=4
+under `notebooks/original/` (`train_boundary_*.ipynb`). Since retrieval only
+their markdown title cells and one comment in two files have changed, with no
+code, configuration or output cell touched; `notebooks/original/README.md`
+records the details. They are Kaggle-environment notebooks (T4,
+`/kaggle/working` paths) covering the original grid (P in {8, 16} CI and CD,
+P = 2 CI only) at n=5 and the original P=4 CI cells at n=3. The full P=4
 extension (CD and CI, n=5, across the gamma sweep) was trained by the
 revision-era gamma-slice notebooks committed under `notebooks/`, which carry
 their own per-epoch checkpoint/resume protocol.
@@ -418,5 +437,6 @@ repository itself later disappears.
 ## License
 
 Code and data in this repository are released under the MIT License; see
-[`LICENSE`](LICENSE). The paper itself will be published by TMLR under CC BY
-4.0 once the issue is assigned; it is currently accepted, not yet published.
+[`LICENSE`](LICENSE). The paper is accepted at TMLR; under TMLR's editorial
+policy it counts as published once the Action Editor approves the camera-ready
+version.
